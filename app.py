@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
 
 # CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Gestão Associação", page_icon="📊", layout="wide")
@@ -8,21 +7,30 @@ st.set_page_config(page_title="Gestão Associação", page_icon="📊", layout="
 st.title("🦅 Sistema de Gestão - Associação")
 st.markdown("---")
 
-# CONEXÃO COM O GOOGLE SHEETS
+# CONEXÃO DIRETA E NATIVA COM O GOOGLE SHEETS (Via link CSV público)
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
+    # Link da planilha vindo dos Secrets
+    url_base = st.secrets["connections"]["gsheets"]["spreadsheet"]
     
-    # LER DADOS DAS ABAS DA PLANILHA
-    df_socios = conn.read(worksheet="Socios", ttl=0)
-    df_financeiro = conn.read(worksheet="Financeiro", ttl=0)
-except Exception:
-    st.error("Configure os dados de acesso ao Google Sheets nos Secrets do Streamlit.")
+    # Transforma o link normal da planilha em um link de download de dados nativo
+    if "edit#" in url_base:
+        url_socios = url_base.split("edit#")[0] + "gviz/tq?tqx=out:csv&sheet=Socios"
+        url_financeiro = url_base.split("edit#")[0] + "gviz/tq?tqx=out:csv&sheet=Financeiro"
+    else:
+        url_socios = url_base
+        url_financeiro = url_base
+
+    # Lê os dados de forma nativa (Sem precisar de nenhuma biblioteca extra!)
+    df_socios = pd.read_csv(url_socios)
+    df_financeiro = pd.read_csv(url_financeiro)
+except Exception as e:
+    st.error("Por favor, verifique as Configurações Avançadas (Secrets) no Streamlit.")
     st.stop()
 
 # CÁLCULO DE SALDO EM TEMPO REAL
 if not df_financeiro.empty and "Tipo" in df_financeiro.columns and "Valor" in df_financeiro.columns:
-    entradas = pd.to_numeric(df_financeiro[df_financeiro['Tipo'] == 'Entrada']['Valor']).sum()
-    saidas = pd.to_numeric(df_financeiro[df_financeiro['Tipo'] == 'Saída']['Valor']).sum()
+    entradas = pd.to_numeric(df_financeiro[df_financeiro['Tipo'] == 'Entrada']['Valor'], errors='coerce').sum()
+    saidas = pd.to_numeric(df_financeiro[df_financeiro['Tipo'] == 'Saída']['Valor'], errors='coerce').sum()
     saldo_atual = entradas - saidas
 else:
     entradas, saidas, saldo_atual = 0.0, 0.0, 0.0
@@ -36,49 +44,13 @@ col3.metric(label="💰 Saldo Atual em Caixa", value=f"R$ {saldo_atual:,.2f}")
 st.markdown("---")
 
 # ABAS DE NAVEGAÇÃO
-aba_socios, aba_financeiro, aba_relatorios = st.tabs(["👥 Controle de Sócios", "💸 Fluxo de Caixa", "📋 Relatórios Gerais"])
+aba_socios, aba_financeiro = st.tabs(["👥 Controle de Sócios", "💸 Fluxo de Caixa"])
 
-# --- ABA: CONTROLE DE SÓCIOS ---
 with aba_socios:
-    st.subheader("Cadastrar Novo Sócio")
-    with st.form("form_socio", clear_on_submit=True):
-        nome = st.text_input("Nome Completo")
-        cpf = st.text_input("CPF / Identificação")
-        status = st.selectbox("Status Inicial", ["Ativo", "Inativo", "Inadimplente"])
-        bt_salvar_socio = st.form_submit_button("Gravar Sócio")
-        
-        if bt_salvar_socio and nome:
-            novo_socio = pd.DataFrame([{"Nome": nome, "CPF": cpf, "Status": status}])
-            df_atualizado = pd.concat([df_socios, novo_socio], ignore_index=True)
-            conn.update(worksheet="Socios", data=df_atualizado)
-            st.success(f"Sócio {nome} cadastrado com sucesso!")
-            st.rerun()
-
     st.subheader("Lista de Sócios Cadastrados")
     st.dataframe(df_socios, use_container_width=True)
 
-# --- ABA: FLUXO DE CAIXA ---
 with aba_financeiro:
-    st.subheader("Lançar Movimentação Financeira")
-    with st.form("form_financeiro", clear_on_submit=True):
-        col_data, col_desc = st.columns(2)
-        data_lanc = col_data.date_input("Data")
-        desc_lanc = col_desc.text_input("Descrição")
-        
-        col_tipo, col_val = st.columns(2)
-        tipo_lanc = col_tipo.selectbox("Tipo", ["Entrada", "Saída"])
-        valor_lanc = col_val.number_input("Valor (R$)", min_value=0.0, step=10.0, format="%.2f")
-        
-        bt_salvar_fin = st.form_submit_button("Lançar no Caixa")
-        
-        if bt_salvar_fin and desc_lanc and valor_lanc > 0:
-            nova_mov = pd.DataFrame([{"Data": str(data_lanc), "Descrição": desc_lanc, "Tipo": tipo_lanc, "Valor": valor_lanc}])
-            df_fin_atualizado = pd.concat([df_financeiro, nova_mov], ignore_index=True)
-            conn.update(worksheet="Financeiro", data=df_fin_atualizado)
-            st.success("Movimentação registrada!")
-            st.rerun()
-
-# --- ABA: RELATÓRIOS ---
-with aba_relatorios:
     st.subheader("Histórico do Extrato Financeiro")
     st.dataframe(df_financeiro, use_container_width=True)
+
