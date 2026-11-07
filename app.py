@@ -7,16 +7,18 @@ st.set_page_config(page_title="Gestão Associação", page_icon="📊", layout="
 st.title("🦅 Sistema de Gestão - Associação")
 st.markdown("---")
 
-# CONEXÃO DIRETA COM O GOOGLE SHEETS (Substituindo o split problemático)
+# CONEXÃO DIRETA COM O GOOGLE SHEETS
 try:
     url_base = st.secrets["connections"]["gsheets"]["spreadsheet"]
     
-    # Limpa o link de forma segura para o formato de exportação de dados
-    link_base = url_base.split("/edit")[0]
-    url_socios = f"{link_base}/gviz/tq?tqx=out:csv&sheet=Socios"
-    url_financeiro = f"{link_base}/gviz/tq?tqx=out:csv&sheet=Financeiro"
+    # Divide o link antes do '/edit' para garantir o endereço limpo da planilha
+    link_limpo = url_base.split("/edit")[0]
+    
+    # Cria os links nativos específicos e separados para cada aba
+    url_socios = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Socios"
+    url_financeiro = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Financeiro"
 
-    # Leitura rápida dos dados da planilha
+    # Leitura isolada de cada tabela
     df_socios = pd.read_csv(url_socios)
     df_financeiro = pd.read_csv(url_financeiro)
 except Exception as e:
@@ -27,7 +29,9 @@ except Exception as e:
 entradas, saidas, saldo_atual = 0.0, 0.0, 0.0
 
 if not df_financeiro.empty:
-    # Garante que as colunas existem antes de somar
+    # Padroniza os nomes das colunas para evitar erros de maiúsculas/minúsculas
+    df_financeiro.columns = [c.strip().title() for c in df_financeiro.columns]
+    
     if "Tipo" in df_financeiro.columns and "Valor" in df_financeiro.columns:
         df_financeiro["Valor"] = pd.to_numeric(df_financeiro["Valor"], errors='coerce').fillna(0)
         entradas = df_financeiro[df_financeiro['Tipo'] == 'Entrada']['Valor'].sum()
@@ -42,13 +46,19 @@ col3.metric(label="💰 Saldo Atual em Caixa", value=f"R$ {saldo_atual:,.2f}")
 
 st.markdown("---")
 
-# ABAS DE NAVEGAÇÃO
+# ABAS DE NAVEGAÇÃO ORGANIZADAS
 aba_socios, aba_financeiro = st.tabs(["👥 Controle de Sócios", "💸 Fluxo de Caixa"])
 
 with aba_socios:
     st.subheader("Lista de Sócios Cadastrados")
-    st.dataframe(df_socios, use_container_width=True)
+    if not df_socios.empty:
+        st.dataframe(df_socios, use_container_width=True)
+    else:
+        st.info("Nenhum sócio encontrado na aba 'Socios' da planilha.")
 
 with aba_financeiro:
     st.subheader("Histórico do Extrato Financeiro")
-    st.dataframe(df_financeiro, use_container_width=True)
+    if not df_financeiro.empty:
+        st.dataframe(df_financeiro, use_container_width=True)
+    else:
+        st.info("Nenhuma movimentação encontrada na aba 'Financeiro' da planilha.")
