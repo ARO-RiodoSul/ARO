@@ -7,33 +7,32 @@ st.set_page_config(page_title="Gestão Associação", page_icon="📊", layout="
 st.title("🦅 Sistema de Gestão - Associação")
 st.markdown("---")
 
-# CONEXÃO DIRETA E NATIVA COM O GOOGLE SHEETS (Via link CSV público)
+# CONEXÃO DIRETA COM O GOOGLE SHEETS (Substituindo o split problemático)
 try:
-    # Link da planilha vindo dos Secrets
     url_base = st.secrets["connections"]["gsheets"]["spreadsheet"]
     
-    # Transforma o link normal da planilha em um link de download de dados nativo
-    if "edit#" in url_base:
-        url_socios = url_base.split("edit#")[0] + "gviz/tq?tqx=out:csv&sheet=Socios"
-        url_financeiro = url_base.split("edit#")[0] + "gviz/tq?tqx=out:csv&sheet=Financeiro"
-    else:
-        url_socios = url_base
-        url_financeiro = url_base
+    # Limpa o link de forma segura para o formato de exportação de dados
+    link_base = url_base.split("/edit")[0]
+    url_socios = f"{link_base}/gviz/tq?tqx=out:csv&sheet=Socios"
+    url_financeiro = f"{link_base}/gviz/tq?tqx=out:csv&sheet=Financeiro"
 
-    # Lê os dados de forma nativa (Sem precisar de nenhuma biblioteca extra!)
+    # Leitura rápida dos dados da planilha
     df_socios = pd.read_csv(url_socios)
     df_financeiro = pd.read_csv(url_financeiro)
 except Exception as e:
-    st.error("Por favor, verifique as Configurações Avançadas (Secrets) no Streamlit.")
+    st.error("Por favor, verifique se o link da planilha está correto nas configurações avançadas.")
     st.stop()
 
 # CÁLCULO DE SALDO EM TEMPO REAL
-if not df_financeiro.empty and "Tipo" in df_financeiro.columns and "Valor" in df_financeiro.columns:
-    entradas = pd.to_numeric(df_financeiro[df_financeiro['Tipo'] == 'Entrada']['Valor'], errors='coerce').sum()
-    saidas = pd.to_numeric(df_financeiro[df_financeiro['Tipo'] == 'Saída']['Valor'], errors='coerce').sum()
-    saldo_atual = entradas - saidas
-else:
-    entradas, saidas, saldo_atual = 0.0, 0.0, 0.0
+entradas, saidas, saldo_atual = 0.0, 0.0, 0.0
+
+if not df_financeiro.empty:
+    # Garante que as colunas existem antes de somar
+    if "Tipo" in df_financeiro.columns and "Valor" in df_financeiro.columns:
+        df_financeiro["Valor"] = pd.to_numeric(df_financeiro["Valor"], errors='coerce').fillna(0)
+        entradas = df_financeiro[df_financeiro['Tipo'] == 'Entrada']['Valor'].sum()
+        saidas = df_financeiro[df_financeiro['Tipo'] == 'Saída']['Valor'].sum()
+        saldo_atual = entradas - saidas
 
 # Painel de Indicadores Visuais
 col1, col2, col3 = st.columns(3)
@@ -53,4 +52,3 @@ with aba_socios:
 with aba_financeiro:
     st.subheader("Histórico do Extrato Financeiro")
     st.dataframe(df_financeiro, use_container_width=True)
-
