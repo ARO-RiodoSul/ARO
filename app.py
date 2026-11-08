@@ -1,42 +1,25 @@
 import streamlit as st
 import pandas as pd
-import os, pickle
+import pickle
 
-st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
-st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
+# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
+st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png", layout="wide")
 
-# SOLUÇÃO DEFINITIVA: Utiliza a pasta temporária do Linux para garantir permissão de escrita no Streamlit Cloud
-PATH_USUARIOS = "/tmp/backup_usuarios.pkl"
-PATH_SOCIOS = "/tmp/backup_socios.csv"
-
-# Se o arquivo não existir na pasta temporária, tenta ler a versão inicial que você criou no GitHub
+# --- INICIALIZAÇÃO DO BANCO DE LOGINS NA MEMÓRIA ---
 if "banco_usuarios_dinamicos" not in st.session_state:
-    if os.path.exists(PATH_USUARIOS):
-        try:
-            with open(PATH_USUARIOS, "rb") as f: st.session_state["banco_usuarios_dinamicos"] = pickle.load(f)
-        except: st.session_state["banco_usuarios_dinamicos"] = {}
-    elif os.path.exists("backup_usuarios.pkl"):
-        try:
-            with open("backup_usuarios.pkl", "rb") as f: st.session_state["banco_usuarios_dinamicos"] = pickle.load(f)
-        except: st.session_state["banco_usuarios_dinamicos"] = {}
-    else:
-        st.session_state["banco_usuarios_dinamicos"] = {
-            "Socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
-            "Visitante": {"senha": "aro999", "role": "visitante", "socio_vinculado": "Nenhum"}
-        }
+    st.session_state["banco_usuarios_dinamicos"] = {
+        "Socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
+        "Visitante": {"senha": "aro999", "role": "visitante", "socio_vinculado": "Nenhum"}
+    }
 
 usuarios_cadastrados = st.session_state["banco_usuarios_dinamicos"]
 
+# --- SISTEMA DE LOGIN SEGURO ---
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "visitante"})
 
 if not st.session_state["autenticado"]:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"):
-        _, col_img, _ = st.columns(3)
-        col_img.image("logo.png", use_container_width=True)
-    else:
-        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     
     with st.form("t_login"):
         u = st.text_input("Usuário")
@@ -57,7 +40,7 @@ if not st.session_state["autenticado"]:
             else:
                 st.error("Usuário ou senha incorretos.")
                 
-    st.write("<p style='text-align: center; color: gray; margin: 5px 0;'>Ou se você é apenas um visitor do evento:</p>", unsafe_allow_html=True)
+    st.write("<p style='text-align: center; color: gray; margin: 5px 0;'>Ou se você é apenas um visitante do evento:</p>", unsafe_allow_html=True)
     if st.button("🌐 Entrar como Convidado / Visitante", use_container_width=True):
         st.session_state.update({"autenticado": True, "user_role": "visitante", "username": "Visitante Convidado"})
         st.rerun()
@@ -65,20 +48,11 @@ if not st.session_state["autenticado"]:
 
 # --- SE ESTIVER AUTENTICADO ---
 if "dados_socios_internos" not in st.session_state:
-    if os.path.exists(PATH_SOCIOS):
-        st.session_state["dados_socios_internos"] = pd.read_csv(PATH_SOCIOS)
-    elif os.path.exists("backup_socios.csv"):
-        st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv")
-    else:
-        st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
+    st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
 
 df_socios_global = st.session_state["dados_socios_internos"]
 
 c_l, c_t, c_o = st.columns(3)
-try:
-    if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
-except: pass
-
 c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
 if c_o.button("🔒 Sair do Painel", use_container_width=True):
     st.session_state["autenticado"] = False
@@ -86,14 +60,10 @@ if c_o.button("🔒 Sair do Painel", use_container_width=True):
 
 st.markdown("---")
 role = st.session_state["user_role"]
-if role == "master": st.info("⭐ Modo Administrador: Acesso Master Ativado")
-elif role == "diretoria": st.info("🛡️ Modo Diretoria: Acesso Administrativo Parcial Ativado")
-elif role == "socio": st.info("👥 Modo Sócio: Acesso de Consulta a Torneios Ativado")
-else: st.info("ℹ️ Modo Visitante: Acesso Limitado Ativado")
 
 st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
 
-# --- CENTRAL DE CADASTRO E EXCLUSÃO DINÂMICA DE LOGINS ---
+# --- CENTRAL DE CADASTRO DINÂMICO DE LOGINS (EXCLUSIVO MASTER) ---
 if role == "master":
     st.write("---")
     st.markdown("### 🔑 Central de Gerenciamento de Acessos")
@@ -121,11 +91,8 @@ if role == "master":
                         st.error("Selecione qual sócio oficial será vinculado!")
                     else:
                         st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {"senha": novo_s.strip(), "role": "socio" if tipo_role == "Sócio" else "visitante", "socio_vinculado": socio_vinc}
-                        try:
-                            with open(PATH_USUARIOS, "wb") as f: pickle.dump(st.session_state["banco_usuarios_dinamicos"], f)
-                            st.success("Usuário salvo com sucesso!")
-                            st.rerun()
-                        except: st.error("Erro ao gravar arquivo físico de backup.")
+                        st.success("Usuário salvo na memória viva com sucesso!")
+                        st.rerun()
                 else: st.error("Preencha todos os campos!")
                     
     with col_cad_2:
@@ -142,11 +109,6 @@ if role == "master":
             if st.button("❌ Deletar Usuário Selecionado", use_container_width=True):
                 if confirmar_del:
                     del st.session_state["banco_usuarios_dinamicos"][u_para_deletar]
-                    try:
-                        with open(PATH_USUARIOS, "wb") as f: pickle.dump(st.session_state["banco_usuarios_dinamicos"], f)
-                        st.success("Usuário excluído!")
-                        st.rerun()
-                    except: st.error("Erro ao atualizar o backup.")
-                else: st.error("Marque a confirmação!")
-        else:
-            st.caption("Nenhum usuário dinâmico ativo.")
+                    st.success("Usuário excluído de forma imediata!")
+                    st.rerun()
+                else: st.error("Marque o quadrado de confirmação antes de deletar!")
