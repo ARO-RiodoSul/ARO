@@ -4,35 +4,34 @@ import io, os
 
 st.set_page_config(page_title="Sócios - Painel ARO", page_icon="👥", layout="wide")
 
-if st.session_state.get("user_role") not in ["master", "diretoria"]:
-    st.error("🔒 Acesso Restrito! Esta página é exclusiva para membros do nível Master ou Diretoria.")
+# --- AJUSTE DE SEGURANÇA E CORREÇÃO DE STRINGS ---
+role_atual = str(st.session_state.get("user_role", "")).strip().lower()
+usuario_logado = str(st.session_state.get("username", "")).strip().lower()
+
+if role_atual not in ["master", "diretoria", "admin"] and usuario_logado not in ["master", "admin"]:
+    st.error("🔒 Acesso Restrito! Esta página é exclusiva para Master ou Diretoria.")
     st.stop()
 
 st.title("👥 Cadastro de Sócios - ARO Rio do Sul")
-is_master = st.session_state.get("user_role") == "master"
+is_master = role_atual in ["master", "admin"] or usuario_logado in ["master", "admin"]
 
-# Nome estável do arquivo físico no servidor
 ARQUIVO_SOCIOS_FISICO = "backup_socios.csv"
 
-def carregar_socios_disco():
+# FUNÇÃO DE CACHE GLOBAL PARA FORÇAR O COMPARTILHAMENTO ENTRE TODOS OS DISPOSITIVOS
+@st.cache_data(ttl=1)
+def ler_banco_compartilhado(update_trigger=0):
     if os.path.exists(ARQUIVO_SOCIOS_FISICO):
         try:
-            df = pd.read_csv(ARQUIVO_SOCIOS_FISICO)
-            st.session_state["dados_socios_internos"] = df
+            return pd.read_csv(ARQUIVO_SOCIOS_FISICO)
         except:
-            st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
-    else:
-        st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
+            return pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
+    return pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
 
-def salvar_socios_disco():
-    df_para_salvar = st.session_state["dados_socios_internos"]
-    df_para_salvar.to_csv(ARQUIVO_SOCIOS_FISICO, index=False)
+# Gatilho para limpar o cache quando houver mudanças
+if "socio_trigger" not in st.session_state:
+    st.session_state["socio_trigger"] = 0
 
-# Garante o carregamento do arquivo físico antes de montar a tela
-if "dados_socios_internos" not in st.session_state:
-    carregar_socios_disco()
-
-df_socios = st.session_state["dados_socios_internos"]
+df_socios = ler_banco_compartilhado(st.session_state["socio_trigger"])
 
 if not df_socios.empty:
     df_socios["Número"] = pd.to_numeric(df_socios["Número"], errors='coerce').fillna(1).astype(int)
@@ -57,12 +56,13 @@ if is_master:
                     "Número": int(proximo_no), "ID": id_aro.strip(), "Nome": nome_socio.strip(),
                     "Telefone": tel_socio.strip(), "CPF": cpf_socio.strip(), "CTF": ctf_socio.strip(), "Status": status_socio
                 }])
-                st.session_state["dados_socios_internos"] = pd.concat([df_socios, novo_registro], ignore_index=True)
-                salvar_socios_disco()  # Força gravação física instantânea
-                st.success(f"Sucesso! Sócio '{nome_socio.strip()}' cadastrado com o Nº {proximo_no}!")
+                df_novo = pd.concat([df_socios, novo_registro], ignore_index=True)
+                df_novo.to_csv(ARQUIVO_SOCIOS_FISICO, index=False)
+                st.session_state["socio_trigger"] += 1
+                st.success(f"Sucesso! Sócio '{nome_socio.strip()}' cadastrado!")
                 st.rerun()
             else:
-                st.error("Por favor, preencha ao menos o campo 'Nome Completo'!")
+                st.error("Preencha o campo 'Nome Completo'!")
 st.write("---")
 st.markdown("### 📊 Listagem de Sócios Cadastrados")
 
@@ -89,7 +89,7 @@ with col_back_1:
     buffer_csv = io.StringIO()
     df_socios.to_csv(buffer_csv, index=False)
     st.download_button(
-        label="📥 Fazer Backup da Lista de Sócios (Formato .CSV)",
+        label="📥 Fazer Backup da Lista de Sócios (.CSV)",
         data=buffer_csv.getvalue(),
         file_name="backup_socios_aro.csv",
         mime="text/csv",
@@ -99,7 +99,7 @@ with col_back_1:
 with col_back_2:
     if is_master:
         st.markdown("**Importar Arquivo de Backup**")
-        arquivo_enviado = st.file_uploader("Selecione o arquivo 'backup_socios_aro.csv' salvo:", type=["csv"], key="uploader_socios")
+        arquivo_enviado = st.file_uploader("Selecione o arquivo CSV oficial:", type=["csv"], key="uploader_socios")
         if arquivo_enviado is not None:
             try:
                 df_importado = pd.read_csv(arquivo_enviado)
@@ -107,32 +107,31 @@ with col_back_2:
                 
                 if all(col in df_importado.columns for col in colunas_obrigatorias):
                     if st.button("🔄 Confirmar Restauração do Banco de Dados", use_container_width=True, type="primary"):
-                        st.session_state["dados_socios_internos"] = df_importado
-                        salvar_socios_disco()  # Salva o arquivo importado fisicamente no disco do servidor
-                        st.success("Banco de dados de sócios restaurado e sincronizado com o servidor!")
+                        df_importado.to_csv(ARQUIVO_SOCIOS_FISICO, index=False)
+                        st.session_state["socio_trigger"] += 1
+                        st.success("Banco de dados sincronizado e compartilhado com sucesso!")
                         st.rerun()
                 else:
-                    st.error("⚠️ O arquivo enviado não possui as colunas oficiais do sistema da ARO.")
+                    st.error("⚠️ Arquivo inválido.")
             except:
-                st.error("Erro ao ler o arquivo CSV.")
+                st.error("Erro ao ler CSV.")
 
 if is_master and not df_socios.empty:
     st.write("---")
     st.markdown("### 🗑️ Remover Membro do Sistema")
     lista_opcoes_del = [f"Nº {r['Número']} - {r['Nome']} (ID: {r['ID']})" for _, r in df_socios.iterrows()]
     socio_para_deletar = st.selectbox("Selecione o sócio que deseja apagar:", lista_opcoes_del)
-    confirmar_del_socio = st.checkbox("💥 Confirmo que desejo excluir permanentemente este cadastro")
+    confirmar_del_socio = st.checkbox("💥 Confirmo que desejo excluir")
     
     if st.button("❌ Deletar Sócio Selecionado", use_container_width=True):
         if confirmar_del_socio:
             posicao = lista_opcoes_del.index(socio_para_deletar)
-            st.session_state["dados_socios_internos"] = df_socios.drop(df_socios.index[posicao]).reset_index(drop=True)
-            
-            if not st.session_state["dados_socios_internos"].empty:
-                st.session_state["dados_socios_internos"]["Número"] = list(range(1, len(st.session_state["dados_socios_internos"]) + 1))
-                
-            salvar_socios_disco()  # Atualiza o arquivo físico após a remoção
-            st.success("Membro excluído do sistema com sucesso!")
+            df_remanescente = df_socios.drop(df_socios.index[posicao]).reset_index(drop=True)
+            if not df_remanescente.empty:
+                df_remanescente["Número"] = list(range(1, len(df_remanescente) + 1))
+            df_remanescente.to_csv(ARQUIVO_SOCIOS_FISICO, index=False)
+            st.session_state["socio_trigger"] += 1
+            st.success("Membro excluído com sucesso!")
             st.rerun()
         else:
-            st.error("Marque o quadrado de confirmação de segurança antes de excluir!")
+            st.error("Marque a caixa de confirmação!")
