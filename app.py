@@ -1,76 +1,82 @@
 import streamlit as st
 import pandas as pd
-import os, pickle
+import datetime
 
-# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
-st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
+# 1. CONFIGURAÇÃO DA PÁGINA (Deve ser o primeiro comando)
+st.set_page_config(
+    page_title="Painel de Controle - ARO Rio do Sul",
+    page_icon="🦅",
+    layout="wide"
+)
 
-# TRAVA PARA FORÇAR A LOGO E NOME NO CELULAR
-st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
+# 2. INICIALIZAÇÃO SEGURA DO ESTADO GLOBAL (session_state)
+if "username" not in st.session_state:
+    st.session_state["username"] = None
+if "user_role" not in st.session_state:
+    st.session_state["user_role"] = None
+if "data_torneio_aro" not in st.session_state:
+    st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
 
-# --- SISTEMA DE LOGIN SEGURO ---
-if "autenticado" not in st.session_state:
-    st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
+# --- 3. CONTROLE DE NAVEGAÇÃO SEGURO (BLOCAGE DE PÁGINAS) ---
+# Definir a página inicial de login
+login_page = st.Page("app.py", title="🔑 Área de Acesso", icon="🔒")
 
-if not st.session_state["autenticado"]:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"):
-        _, col_img, _ = st.columns(3)
-        col_img.image("logo.png", use_container_width=True)
-    else:
-        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
+# Definir as páginas protegidas que ficam na pasta /pages
+pag_socios = st.Page("pages/1_Socios.py", title="👥 Cadastro de Sócios", icon="👥")
+pag_financas = st.Page("pages/2_Financas.py", title="💰 Fluxo de Caixa", icon="💰")
+pag_torneios = st.Page("pages/3_Torneios.py", title="🦅 Torneios Oficiais", icon="🦅")
+
+# REGRA DE OURO: Se NÃO estiver logado, a única página existente no app é a tela de login
+if st.session_state["username"] is None:
+    pg = st.navigation([login_page], position="hidden") # Esconde a barra lateral completamente
+    pg.run()
     
-    with st.form("t_login"):
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
-        if st.form_submit_button("Entrar"):
-            if u == "Junior Rebelo" and s == "270688":
-                st.session_state.update({"autenticado": True, "user_role": "master"})
+    # --- TELA DE LOGIN CENTRALIZADA ---
+    st.markdown("<h2 style='text-align: center;'>🦅 Associação Regional dos Ornitofílios</h2>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: gray;'>Sistema de Gestão Interna - ARO Rio do Sul</h4>", unsafe_allow_html=True)
+    st.write("\n")
+    
+    _, col_login_box, _ = st.columns([1, 2, 1])
+    
+    with col_login_box:
+        st.markdown("### 🔑 Identificação do Usuário")
+        usuario_input = st.text_input("Nome de Usuário / Credencial:", placeholder="Ex: Junior Rebelo")
+        
+        if st.button("Entrar no Painel", use_container_width=True):
+            if usuario_input.strip() == "Junior Rebelo":
+                st.session_state["username"] = "Junior Rebelo"
+                st.session_state["user_role"] = "master"
+                st.success("Acesso Master concedido!")
                 st.rerun()
-            elif u == "Kleven" and s == "12345678":
-                st.session_state.update({"autenticado": True, "user_role": "leitor"})
+            elif usuario_input.strip() != "":
+                st.session_state["username"] = usuario_input.strip()
+                st.session_state["user_role"] = "leitura"
+                st.info(f"Acesso concedido como {usuario_input.strip()} (Modo Leitura).")
                 st.rerun()
             else:
-                st.error("Usuário ou senha incorretos.")
-    st.stop()
+                st.error("Por favor, preencha o campo de usuário para entrar.")
 
-# --- CRONOLOGIA DOS MESES ---
-lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
-
-# --- CARREGAMENTO CENTRALIZADO DE BANCOS DE DADOS DO SISTEMA ---
-if "dados_socios_internos" not in st.session_state:
-    st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
-
-if "saldo_anterior_master" not in st.session_state:
-    if os.path.exists("backup_saldo_ant.txt"):
-        with open("backup_saldo_ant.txt", "r") as f: st.session_state["saldo_anterior_master"] = float(f.read())
-    else: st.session_state["saldo_anterior_master"] = 0.0
-
-if "dados_meses_financeiros" not in st.session_state:
-    st.session_state["dados_meses_financeiros"] = pickle.load(open("backup_financas.pkl", "rb")) if os.path.exists("backup_financas.pkl") else {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
-
-if "dados_torneios_internos" not in st.session_state:
-    st.session_state["dados_torneios_internos"] = pickle.load(open("backup_torneios_v2.pkl", "rb")) if os.path.exists("backup_torneios_v2.pkl") else pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
-
-if "data_torneio_aro" not in st.session_state:
-    st.session_state["data_torneio_aro"] = open("backup_data_torneio.txt", "r").read() if os.path.exists("backup_data_torneio.txt") else "08/11/2026"
-
-# --- TELA: MENU PRINCIPAL / CAPA INTERNA ---
-c_l, c_t, c_o = st.columns(3)
-try:
-    if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
-except: pass
-
-c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-if c_o.button("🔒 Sair do Painel"):
-    st.session_state["autenticado"] = False
-    st.rerun()
-
-st.markdown("---")
-st.info("⭐ Modo Administrador: Acesso Master Ativado" if st.session_state["user_role"] == "master" else "ℹ️ Modo de Leitura: Acesso de Consulta Ativado")
-
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda do seu navegador ou celular para navegar entre as planilhas de Sócios, Finanças e Torneios de forma independente.</p>", unsafe_allow_html=True)
-
+# Se o usuário JÁ estiver logado, libera o menu lateral com todas as páginas reais
+else:
+    # Gerencia a barra de navegação ativa com as abas protegidas
+    pg = st.navigation({
+        "Menu Principal": [login_page],
+        "Módulos Administrativos": [pag_socios, pag_financas, pag_torneios]
+    })
+    pg.run()
+    
+    # Conteúdo que aparece na tela inicial ('app.py') após o login efetuado
+    st.sidebar.write("---")
+    if st.sidebar.button("🚪 Encerrar Sessão", use_container_width=True):
+        st.session_state["username"] = None
+        st.session_state["user_role"] = None
+        st.rerun()
+        
+    st.markdown(f"## 👋 Olá, {st.session_state['username']}!")
+    st.write("Você está conectado ao sistema da ARO. Utilize a barra lateral que acabou de aparecer para navegar entre os módulos.")
+    st.write("---")
+    
+    # Dashboard Informativo Simples de Boas-Vindas
+    st.markdown("### 📅 Próximo Evento Cadastrado")
+    st.metric(label="Data do Torneio Oficial ARO", value=st.session_state["data_torneio_aro"].strftime('%d/%m/%Y'))
+    st.caption("Para alterar dados financeiros ou realizar inscrições de aves, selecione a página correspondente no menu lateral esquerdo.")
