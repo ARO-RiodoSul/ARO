@@ -16,8 +16,7 @@ if not st.session_state["autenticado"]:
     if os.path.exists("logo.png"):
         _, col_img, _ = st.columns(3)
         col_img.image("logo.png", use_container_width=True)
-    else:
-        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
         u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
@@ -26,10 +25,9 @@ if not st.session_state["autenticado"]:
             else: st.error("Incorreto.")
     st.stop()
 
-# --- CARREGAMENTO DE BANCOS DE DADOS E BACKUPS ---
+# --- CARREGAMENTO DE BANCOS DE DADOS ---
 if "dados_socios_internos" not in st.session_state:
-    if os.path.exists("backup_socios.csv"): st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv")
-    else: st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+    st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
 
 lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
@@ -69,7 +67,7 @@ if st.session_state["tela_atual"] == "menu":
     c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     if c_o.button("🔒 Sair"): st.session_state["autenticado"] = False; st.rerun()
     st.markdown("---")
-    st.info("⭐ Acesso Master" if st.session_state["user_role"] == "master" else "ℹ️ Acesso de Consulta (Apenas Leitura)")
+    st.info("⭐ Acesso Master" if st.session_state["user_role"] == "master" else "ℹ️ Acesso de Consulta")
     
     cb1, cb2, cb3 = st.columns(3)
     if cb1.button("👥 Sócios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "socios"; st.rerun()
@@ -131,4 +129,5 @@ elif st.session_state["tela_atual"] == "caixa":
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
                     pickle.dump(st.session_state["dados_meses_financeiros"], open("backup_financas.pkl", "wb"))
                     st.toast("💾 Salvo!"); st.rerun()
-    else: 
+    else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
+    st.markdown("---")
