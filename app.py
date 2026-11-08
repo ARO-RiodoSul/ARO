@@ -42,7 +42,7 @@ if not st.session_state["autenticado"]:
                 st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": "Vanderlei"})
                 st.rerun()
                 
-            # 3. NOVOS USUÁRIOS FIXOS DE SÓCIOS (Gravados direto no código)
+            # 3. NOVOS USUÁRIOS FIXOS DE SÓCIOS
             elif u_f == "carolina" and s_input == "230197":
                 st.session_state.update({"autenticado": True, "user_role": "socio", "username": "Carolina"})
                 st.rerun()
@@ -84,3 +84,24 @@ if role in ["master", "diretoria"]:
     st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para navegar entre as planilhas de Sócios, Finanças e Torneios.</p>", unsafe_allow_html=True)
 else:
     st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para gerenciar seu plantel de aves e solicitar inscrições em torneios oficiais.</p>", unsafe_allow_html=True)
+
+# --- 🔎 PAINEL SEGRETO DE CONSULTA DE CREDENCIAIS (EXCLUSIVO MASTER) ---
+if role == "master":
+    st.write("---")
+    st.markdown("### 📊 Painel de Controle de Usuários e Senhas")
+    st.caption("🔒 Visão exclusiva do Administrador Master. Sócios e Diretores não têm acesso a esta tabela.")
+    
+    # Monta a lista com os dados exatos do código para seu controle visual na tela
+    dados_usuarios_sistema = [
+        {"Usuário / Login": "Junior Rebelo", "Senha": "    270688", "Categoria / Nível": "MASTER (ADMINISTRADOR)"},
+        {"Usuário / Login": "Kleven", "Senha": "12345678", "Categoria / Nível": "DIRETORIA"},
+        {"Usuário / Login": "Valter", "Senha": "021277", "Categoria / Nível": "DIRETORIA"},
+        {"Usuário / Login": "Peterson", "Senha": "100693", "Categoria / Nível": "DIRETORIA"},
+        {"Usuário / Login": "Mauro", "Senha": "120660", "Categoria / Nível": "DIRETORIA"},
+        {"Usuário / Login": "Vanderlei", "Senha": "251073", "Categoria / Nível": "DIRETORIA"},
+        {"Usuário / Login": "Carolina", "Senha": "230197", "Categoria / Nível": "SÓCIO CLUBE"},
+        {"Usuário / Login": "Pedro", "Senha": "1988", "Categoria / Nível": "SÓCIO CLUBE"}
+    ]
+    
+    df_usuarios_fixos = pd.DataFrame(dados_usuarios_sistema)
+    st.dataframe(df_usuarios_fixos, use_container_width=True, hide_index=True)
