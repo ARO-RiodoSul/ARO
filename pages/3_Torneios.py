@@ -56,7 +56,6 @@ if is_master:
                 livres = [x for x in range(1, limite + 1) if x not in ocupadas]
                 sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else limite + 1)
                 
-                # Regra de taxas e clube vinculados à escolha do Sócio
                 v_ficha = 25.00 if socio == "Sim" else 35.00
                 clube_nome = "ARO" if socio == "Sim" else "Outro"
                 
@@ -75,7 +74,11 @@ for i, esp in enumerate(especies_validas):
         if df_f.empty:
             st.caption("Nenhum pássaro cadastrado nesta categoria.")
         else:
-            st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
+            # Exibição segura garantindo suporte à coluna Clube nas abas
+            df_mostrar = df_f.copy()
+            if "Clube" not in df_mostrar.columns:
+                df_mostrar["Clube"] = "ARO"
+            st.dataframe(df_mostrar.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
 # --- 5. EMISSÃO DE PDF ADESIVO P&B COM DATA E CLUBE ---
 def gerar_pdf_fichas(df_dados, data_evento):
@@ -114,15 +117,24 @@ def gerar_pdf_fichas(df_dados, data_evento):
         pdf.drawString(px + 12, py + altura_f - 116, "CLUBE:")
         pdf.drawString(px + 12, py + altura_f - 131, "ESPÉCIE:")
         
+        # CORREÇÃO SEGURA: Tratamento com .get() para evitar o KeyError em dados antigos
+        clube_val = r.get('Clube', 'ARO')
+        if pd.isna(clube_val) or str(clube_val).strip() == "":
+            clube_val = "ARO"
+            
+        valor_val = r.get('Valor', 25.00)
+        if pd.isna(valor_val):
+            valor_val = 25.00
+        
         pdf.setFont("Helvetica", 10.5)
         pdf.drawString(px + 45, py + altura_f - 71, str(r['Nome da Ave']))
         pdf.drawString(px + 75, py + altura_f - 86, str(r['Proprietário']))
         pdf.drawString(px + 68, py + altura_f - 101, str(r['Anilha']))
-        pdf.drawString(px + 65, py + altura_f - 116, str(r['Clube']).upper()) # Exibição do Clube adicionada
+        pdf.drawString(px + 65, py + altura_f - 116, str(clube_val).upper())
         pdf.drawString(px + 75, py + altura_f - 131, str(r['Espécie']).upper())
         
         pdf.setFont("Helvetica-Bold", 10.5)
-        pdf.drawRightString(px + largura_f - 12, py + 12, f"VALOR: R$ {float(r['Valor']):,.2f}")
+        pdf.drawRightString(px + largura_f - 12, py + 12, f"VALOR: R$ {float(valor_val):,.2f}")
         
         x_at += 1
         if x_at >= 2:
@@ -164,3 +176,4 @@ if is_master:
             st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
             st.warning("Torneio zerado com sucesso!")
             st.rerun()
+
