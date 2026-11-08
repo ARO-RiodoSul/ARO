@@ -1,20 +1,26 @@
 import streamlit as st
 import pandas as pd
 import pickle
-import io
 import os
 
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
-st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+PATH_USUARIOS = os.path.abspath("backup_usuarios.pkl")
+PATH_SOCIOS = os.path.abspath("backup_socios.csv")
 
-if "banco_usuarios_dinamicos" not in st.session_state:
-    st.session_state["banco_usuarios_dinamicos"] = {
-        "socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
-        "visitante": {"senha": "aro999", "role": "visitante", "socio_vinculado": "Nenhum"}
-    }
+# Sincronização forçada entre múltiplos dispositivos
+if "banco_usuarios_dinamicos" not in st.session_state or st.sidebar.button("🔄 Sincronizar Sistema"):
+    if os.path.exists(PATH_USUARIOS):
+        try:
+            with open(PATH_USUARIOS, "rb") as f:
+                st.session_state["banco_usuarios_dinamicos"] = pickle.load(f)
+        except:
+            st.session_state["banco_usuarios_dinamicos"] = {}
+    else:
+        st.session_state["banco_usuarios_dinamicos"] = {
+            "socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
+            "visitante": {"senha": "aro999", "role": "visitante", "socio_vinculado": "Nenhum"}
+        }
 
 usuarios_cadastrados = st.session_state["banco_usuarios_dinamicos"]
 
@@ -22,97 +28,64 @@ if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "visitante", "username": ""})
 
 if not st.session_state["autenticado"]:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists(LOGO_PATH):
-        _, col_img, _ = st.columns(3)
-        col_img.image(LOGO_PATH, use_container_width=True)
-    else:
-        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     
     with st.form("t_login"):
-        # CORREÇÃO CHAVE: Remove espaços antes e depois do texto digitado no celular
         u_input = st.text_input("Usuário").strip()
         s_input = st.text_input("Senha", type="password").strip()
         
         if st.form_submit_button("Entrar"):
-            # Converte o input para minúsculo para comparar sem erro de digitação
             u_f = u_input.lower()
             
             if u_input == "Junior Rebelo" and s_input == "270688":
                 st.session_state.update({"autenticado": True, "user_role": "master", "username": "Junior Rebelo"})
                 st.rerun()
             elif u_f in ["kleven", "valter", "peterson", "mauro"] and s_input == {"kleven": "12345678", "valter": "021277", "peterson": "100693", "mauro": "120660"}[u_f]:
-                # Resgata o nome com a primeira letra maiúscula correta
-                nome_correto = u_f.capitalize()
-                st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": nome_correto})
+                st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": u_f.capitalize()})
                 st.rerun()
             elif u_f == "vanderlei" and s_input == "251073":
                 st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": "Vanderlei"})
                 st.rerun()
-            # BUSCA INTELIGENTE: Ignora maiúsculas/minúsculas nos logins criados por você
             elif u_f in [k.lower() for k in usuarios_cadastrados.keys()]:
-                # Encontra a chave original correspondente dentro do banco
                 chave_original = [k for k in usuarios_cadastrados.keys() if k.lower() == u_f][0]
-                if usuarios_cadastrados[chave_original]["senha"] == s_input:
+                if str(usuarios_cadastrados[chave_original]["senha"]).strip() == s_input:
                     st.session_state.update({
                         "autenticado": True, 
                         "user_role": usuarios_cadastrados[chave_original]["role"], 
                         "username": chave_original
                     })
                     st.rerun()
-                else:
-                    st.error("Usuário ou senha incorretos.")
-            else:
-                st.error("Usuário ou senha incorretos.")
+                else: st.error("Usuário ou senha incorretos.")
+            else: st.error("Usuário ou senha incorretos.")
                 
-    st.write("<p style='text-align: center; color: gray; margin: 5px 0;'>Ou se você é apenas um visitante do evento:</p>", unsafe_allow_html=True)
     if st.button("🌐 Entrar como Convidado / Visitante", use_container_width=True):
         st.session_state.update({"autenticado": True, "user_role": "visitante", "username": "Visitante Convidado"})
         st.rerun()
     st.stop()
 
-# --- SE ESTIVER AUTENTICADO ---
 if "dados_socios_internos" not in st.session_state:
-    st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
+    st.session_state["dados_socios_internos"] = pd.read_csv(PATH_SOCIOS) if os.path.exists(PATH_SOCIOS) else pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
 
 df_socios_global = st.session_state["dados_socios_internos"]
-
 c_l, c_t, c_o = st.columns(3)
-try:
-    if os.path.exists(LOGO_PATH): c_l.image(LOGO_PATH, width=80)
-except: pass
-
-c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO</h1>", unsafe_allow_html=True)
 if c_o.button("🔒 Sair do Painel", use_container_width=True):
     st.session_state["autenticado"] = False
     st.rerun()
 
-st.markdown("---")
 role = st.session_state["user_role"]
-if role == "master": st.info("⭐ Modo Administrador: Acesso Master Ativado")
-elif role == "diretoria": st.info("🛡️ Modo Diretoria: Acesso Administrativo Parcial Ativado")
-elif role == "socio": st.info("👥 Modo Sócio: Acesso de Consulta a Torneios Ativado")
-else: st.info("ℹ️ Modo Visitante: Acesso Limitado Ativado")
+st.markdown(f"### 🦅 Bem-vindo, {st.session_state['username']}!")
 
-st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
-
-if role in ["master", "diretoria"]:
-    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para navegar entre as planilhas de Sócios, Finanças e Torneios.</p>", unsafe_allow_html=True)
-else:
-    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para visualizar a página de **Torneios**.</p>", unsafe_allow_html=True)
-
-# --- CENTRAL DE CADASTRO DINÂMICO DE LOGINS (EXCLUSIVO MASTER) ---
 if role == "master":
     st.write("---")
-    st.markdown("### 🔑 Central de Gerenciamento de Acessos")
+    st.markdown("### 🔑 Central de Gerenciamento de Acessos Compartilhados")
     col_cad_1, col_cad_2 = st.columns(2)
     
     with col_cad_1:
         with st.form("form_cadastrar_usuario", clear_on_submit=True):
-            st.markdown("**Cadastrar / Atualizar Usuário**")
+            st.markdown("**Cadastrar Novo Usuário**")
             novo_u = st.text_input("Nome de Usuário (Login):")
-            novo_s = st.text_input("Senha de Acesso:", type="password")
+            novo_s = st.text_input("Senha de Acesso:")
             tipo_role = st.selectbox("Categoria/Nível:", ["Sócio", "Visitante"])
             
             socio_vinc = "Nenhum"
@@ -122,62 +95,23 @@ if role == "master":
                     lista_nomes.extend(df_socios_global["Nome"].dropna().str.strip().tolist())
                 socio_vinc = st.selectbox("Vincular Sócio Oficial:", [x for x in lista_nomes if x != ""])
                 
-            if st.form_submit_button("Salvar Usuário", use_container_width=True):
+            if st.form_submit_button("Salvar Usuário Compartilhado", use_container_width=True):
                 if novo_u.strip() and novo_s.strip():
-                    if novo_u.strip().lower() in ["junior rebelo", "kleven", "valter", "peterson", "mauro", "vanderlei"]:
-                        st.error("Nome de usuário reservado!")
-                    elif tipo_role == "Sócio" and socio_vinc == "Selecione o Sócio...":
-                        st.error("Selecione qual sócio oficial será vinculado!")
-                    else:
-                        st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {"senha": novo_s.strip(), "role": "socio" if tipo_role == "Sócio" else "visitante", "socio_vinculado": socio_vinc}
-                        st.success("Usuário salvo na memória viva com sucesso!")
-                        st.rerun()
-                else: st.error("Preencha todos os campos!")
+                    st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {"senha": novo_s.strip(), "role": "socio" if tipo_role == "Sócio" else "visitante", "socio_vinculado": socio_vinc}
+                    with open(PATH_USUARIOS, "wb") as f:
+                        pickle.dump(st.session_state["banco_usuarios_dinamicos"], f)
+                    st.success("Salvo com sucesso! Use o botão abaixo para baixar o backup caso mude de aparelho.")
+                    st.rerun()
                     
     with col_cad_2:
-        st.markdown("**Usuários Cadastrados Ativos**")
+        st.markdown("**Usuários Ativos**")
         if usuarios_cadastrados:
             lista_exibicao = [{"Usuário": k, "Senha": v["senha"], "Nível": str(v["role"]).upper(), "Vínculo": v.get("socio_vinculado", "Nenhum")} for k, v in usuarios_cadastrados.items()]
             st.dataframe(pd.DataFrame(lista_exibicao), use_container_width=True, hide_index=True)
             
-            st.markdown("---")
-            st.markdown("🗑️ **Excluir Usuário**")
-            u_para_deletar = st.selectbox("Conta para apagar:", list(usuarios_cadastrados.keys()))
-            confirmar_del = st.checkbox("💥 Confirmo a exclusão permanente")
-            
+            u_del = st.selectbox("Conta para apagar:", list(usuarios_cadastrados.keys()))
             if st.button("❌ Deletar Usuário Selecionado", use_container_width=True):
-                if confirmar_del:
-                    del st.session_state["banco_usuarios_dinamicos"][u_para_deletar]
-                    st.success("Usuário excluído!")
-                    st.rerun()
-                else: st.error("Marque o quadrado de confirmação antes de deletar!")
+                del st.session_state["banco_usuarios_dinamicos"][u_del]
+                with open(PATH_USUARIOS, "wb") as f: pickle.dump(st.session_state["banco_usuarios_dinamicos"], f)
+                st.success("Excluído!"); st.rerun()
 
-    # CENTRAL DE SEGUROS FIXA DE USUÁRIOS
-    st.write("---")
-    st.markdown("### 💾 Backup das Credenciais de Acesso")
-    col_uback_1, col_fback_2 = st.columns(2)
-    
-    with col_uback_1:
-        st.markdown("**Exportar Usuários Dinâmicos**")
-        buffer_u_pkl = pickle.dumps(st.session_state["banco_usuarios_dinamicos"])
-        st.download_button(
-            label="📥 Fazer Backup dos Usuários Cadastrados (Formato .PKL)",
-            data=buffer_u_pkl,
-            file_name="backup_usuarios_aro.pkl",
-            mime="application/octet-stream",
-            use_container_width=True
-        )
-        
-    with col_fback_2:
-        st.markdown("**Importar Usuários Dinâmicos**")
-        arquivo_u_enviado = st.file_uploader("Selecione o arquivo 'backup_usuarios_aro.pkl' para restaurar as contas:", type=["pkl"], key="uploader_usuarios_din")
-        if arquivo_u_enviado is not None:
-            try:
-                dados_u_importados = pickle.load(arquivo_u_enviado)
-                if isinstance(dados_u_importados, dict):
-                    if st.button("🔄 Confirmar Restauração de Acessos", use_container_width=True, type="primary"):
-                        st.session_state["banco_usuarios_dinamicos"] = dados_u_importados
-                        st.success("Todos os logins de Sócios e Visitantes foram restaurados!")
-                        st.rerun()
-            except:
-                pass
