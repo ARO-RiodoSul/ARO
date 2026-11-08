@@ -2,12 +2,23 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO DA PÁGINA COM ÍCONE DO NAVEGADOR
 st.set_page_config(
     page_title="Painel - ARO Rio do Sul", 
     page_icon="logo.png" if os.path.exists("logo.png") else "📊", 
     layout="wide"
 )
+
+# CÓDIGO OCULTO PARA FORÇAR O CELULAR A MOSTRAR A LOGO E O NOME "ARO" NO ÍCONE DA TELA INICIAL
+st.markdown("""
+    <head>
+        <title>ARO</title>
+        <link rel="apple-touch-icon" href="app/static/logo.png">
+        <link rel="icon" type="image/png" href="app/static/logo.png">
+        <meta name="apple-mobile-web-app-title" content="ARO">
+        <meta name="application-name" content="ARO">
+    </head>
+""", unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
@@ -16,7 +27,7 @@ if "autenticado" not in st.session_state:
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
-        col_l1, col_l2, col_l3 = st.columns(3)
+        _, col_l2, _ = st.columns(3)
         col_l2.image("logo.png", use_container_width=True)
     else:
         st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
@@ -24,15 +35,12 @@ if not st.session_state["autenticado"]:
     st.markdown("<p style='text-align: center; color: #9CA3AF;'>Insira suas credenciais abaixo para acessar o sistema.</p>", unsafe_allow_html=True)
     st.markdown("---")
     with st.form("t_login"):
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
+        u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
             if u == "Junior Rebelo" and s == "270688":
-                st.session_state.update({"autenticado": True, "user_role": "master"})
-                st.rerun()
+                st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
             elif u == "Kleven" and s == "12345678":
-                st.session_state.update({"autenticado": True, "user_role": "leitor"})
-                st.rerun()
+                st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
     st.stop()
@@ -87,7 +95,6 @@ def gerar_relatorio_texto():
     txt += f"💰 Saldo (Total): R$ {s_tot:.2f}\n"
     return txt
 
-# --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
     c_l, c_t, c_o = st.columns(3)
     if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
@@ -98,7 +105,6 @@ if st.session_state["tela_atual"] == "menu":
     if cb1.button("👥 Sócios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "socios"; st.rerun()
     if cb2.button("🪙 Finanças", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "caixa"; st.rerun()
 
-# --- TELA 2: SÓCIOS ---
 elif st.session_state["tela_atual"] == "socios":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("👥 Controle de Sócios")
@@ -107,11 +113,9 @@ elif st.session_state["tela_atual"] == "socios":
         if not df_m.equals(st.session_state["dados_socios_internos"]): 
             st.session_state["dados_socios_internos"] = df_m
             df_m.to_csv("backup_socios.csv", index=False)
-            st.toast("💾 Salvo!")
-            st.rerun()
+            st.toast("💾 Salvo!"); st.rerun()
     else: st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
 
-# --- TELA 3: FINANÇAS ---
 elif st.session_state["tela_atual"] == "caixa":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("🪙 Controle Financeiro - Finanças")
@@ -155,6 +159,3 @@ elif st.session_state["tela_atual"] == "caixa":
                 d_x = cd.number_input("Dia", min_value=1, max_value=31, value=1)
                 e_x, s_x, m_x = ce.number_input("Entrada", min_value=0.0, format="%.2f"), cs.number_input("Saída", min_value=0.0, format="%.2f"), cm.text_input("Motivo")
                 if st.form_submit_button("Inserir") and (e_x > 0 or s_x > 0):
-                    st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
-                    with open("backup_financas.pkl", "wb") as f: pickle.dump(st.session_state["dados_meses_financeiros"], f)
-                    st.toast("💾 Salvo!"); st.rerun()
