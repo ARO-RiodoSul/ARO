@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import pickle
+import io
 
-# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png", layout="wide")
 
 # --- INICIALIZAÇÃO DO BANCO DE LOGINS NA MEMÓRIA ---
@@ -60,10 +60,9 @@ if c_o.button("🔒 Sair do Painel", use_container_width=True):
 
 st.markdown("---")
 role = st.session_state["user_role"]
-
 st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
 
-# --- CENTRAL DE CADASTRO DINÂMICO DE LOGINS (EXCLUSIVO MASTER) ---
+# --- CENTRAL DE CADASTRO E BACKUP DINÂMICO DE LOGINS (EXCLUSIVO MASTER) ---
 if role == "master":
     st.write("---")
     st.markdown("### 🔑 Central de Gerenciamento de Acessos")
@@ -91,7 +90,7 @@ if role == "master":
                         st.error("Selecione qual sócio oficial será vinculado!")
                     else:
                         st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {"senha": novo_s.strip(), "role": "socio" if tipo_role == "Sócio" else "visitante", "socio_vinculado": socio_vinc}
-                        st.success("Usuário salvo na memória viva com sucesso!")
+                        st.success("Usuário salvo na memória viva!")
                         st.rerun()
                 else: st.error("Preencha todos os campos!")
                     
@@ -109,6 +108,36 @@ if role == "master":
             if st.button("❌ Deletar Usuário Selecionado", use_container_width=True):
                 if confirmar_del:
                     del st.session_state["banco_usuarios_dinamicos"][u_para_deletar]
-                    st.success("Usuário excluído de forma imediata!")
+                    st.success("Usuário excluído!")
                     st.rerun()
                 else: st.error("Marque o quadrado de confirmação antes de deletar!")
+
+    # --- NOVO: CENTRAL DE SEGUROS FIXA DE USUÁRIOS CONTRA REBOOTS ---
+    st.write("---")
+    st.markdown("### 💾 Backup das Credenciais de Acesso")
+    col_uback_1, col_fback_2 = st.columns(2)
+    
+    with col_uback_1:
+        st.markdown("**Exportar Usuários Dinâmicos**")
+        buffer_u_pkl = pickle.dumps(st.session_state["banco_usuarios_dinamicos"])
+        st.download_button(
+            label="📥 Fazer Backup dos Usuários Cadastrados (Formato .PKL)",
+            data=buffer_u_pkl,
+            file_name="backup_usuarios_aro.pkl",
+            mime="application/octet-stream",
+            use_container_width=True
+        )
+        
+    with col_fback_2:
+        st.markdown("**Importar Usuários Dinâmicos**")
+        arquivo_u_enviado = st.file_uploader("Selecione o arquivo 'backup_usuarios_aro.pkl' para restaurar as contas:", type=["pkl"], key="uploader_usuarios_din")
+        if arquivo_u_enviado is not None:
+            try:
+                dados_u_importados = pickle.load(arquivo_u_enviado)
+                if isinstance(dados_u_importados, dict):
+                    if st.button("🔄 Confirmar Restauração de Acessos", use_container_width=True, type="primary"):
+                        st.session_state["banco_usuarios_dinamicos"] = dados_u_importados
+                        st.success("Todos os logins de Sócios e Visitantes foram restaurados!")
+                        st.rerun()
+            except:
+                pass
