@@ -3,7 +3,10 @@ import pandas as pd
 import os, pickle, random
 from datetime import datetime
 
+# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
+
+# FORÇAR CONFIGURAÇÃO DE LOGO NO CELULAR
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state:
@@ -12,7 +15,8 @@ if "autenticado" not in st.session_state:
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
-        st.columns(3)[1].image("logo.png", use_container_width=True)
+        _, col_img, _ = st.columns(3)
+        col_img.image("logo.png", use_container_width=True)
     else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
         u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
@@ -22,7 +26,7 @@ if not st.session_state["autenticado"]:
             else: st.error("Incorreto.")
     st.stop()
 
-# --- BACKUPS DE BANCO DE DADOS ---
+# --- CARREGAMENTO DE BANCOS DE DADOS ---
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
 
@@ -48,7 +52,16 @@ t_ent = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Entrad
 t_sai = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Saídas"], errors='coerce').sum() for m in lista_meses)
 s_ges, s_tot = t_ent - t_sai, t_ent + st.session_state["saldo_anterior_master"] - t_sai
 
-# --- MENU PRINCIPAL ---
+# --- LÓGICA DE SORTEIO DE ESTACAS AUTOMÁTICA ---
+def sortear_estaca(esp, df_t):
+    ocupadas = df_t[df_t["Espécie"] == esp]["Estaca"].tolist()
+    lim, prox = (50, 51) if esp in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else ((25, 26) if esp in ["Canário", "Azulão"] else (5, 6))
+    livres = [x for x in range(1, lim + 1) if x not in ocupadas]
+    if livres: return random.choice(livres)
+    while prox in ocupadas: prox += 1
+    return prox
+
+# --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
     c_l, c_t, c_o = st.columns(3)
     try:
@@ -62,7 +75,7 @@ if st.session_state["tela_atual"] == "menu":
     if cb2.button("🪙 Finanças", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "caixa"; st.rerun()
     if cb3.button("🏆 Torneios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "torneios"; st.rerun()
 
-# --- SÓCIOS ---
+# --- TELA 2: SÓCIOS ---
 elif st.session_state["tela_atual"] == "socios":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("👥 Controle de Sócios")
@@ -77,10 +90,10 @@ elif st.session_state["tela_atual"] == "socios":
             st.session_state["dados_socios_internos"].to_csv("backup_socios.csv", index=False); st.rerun()
     else: st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
 
-# --- FINANÇAS ---
+# --- TELA 3: FINANÇAS ---
 elif st.session_state["tela_atual"] == "caixa":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
-    st.title("🪙 Controle Financeiro")
+    st.title("🪙 Controle Financeiro - Finanças")
     _, c_ant, _ = st.columns(3)
     with c_ant:
         st.markdown("<h3 style='text-align: center;'>🏦 Saldo Anterior</h3>", unsafe_allow_html=True)
@@ -107,7 +120,7 @@ elif st.session_state["tela_atual"] == "caixa":
             st.toast("💾 Salvo!"); st.rerun()
     else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
 
-# --- MÓDULO TORNEIOS COMPLETO ---
+# --- TELA 4: TORNEIOS ---
 elif st.session_state["tela_atual"] == "torneios":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("🏆 Gerenciamento de Torneios & Inscrições")
@@ -126,7 +139,6 @@ elif st.session_state["tela_atual"] == "torneios":
     df_t = st.session_state["dados_torneios_internos"]
     esp_lista = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
     
-    # 6 Ícones de Indicadores Rápidos de Espécies
     m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("🪵 Trinca Ferro", f"{len(df_t[df_t['Espécie'] == 'Trinca Ferro'])} aves")
     m2.metric("🌱 Coleiro", f"{len(df_t[df_t['Espécie'] == 'Coleiro'])} aves")
@@ -136,16 +148,5 @@ elif st.session_state["tela_atual"] == "torneios":
     m6.metric("🐦 Tiziu", f"{len(df_t[df_t['Espécie'] == 'Tiziu'])} aves")
     st.markdown("---")
 
-    # Formulário de Inscrição na mesma página (Apenas Master)
     if st.session_state["user_role"] == "master":
         st.subheader("➕ Realizar Nova Inscrição")
-        with st.form("f_ins_torneio", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            prop = c1.text_input("Proprietário")
-            ave = c2.text_input("Nome da Ave")
-            c3, c4 = st.columns(2)
-            esp = c3.selectbox("Espécie", esp_lista)
-            anil = c4.text_input("Anilha")
-            
-            if st.form_submit_button("Inscrever Ave") and prop and ave and anil:
-                df_esp = df_t[df_t["Espécie"] == esp]
