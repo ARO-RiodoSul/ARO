@@ -50,18 +50,19 @@ with st.form("form_cadastro_ave", clear_on_submit=True):
             with open(PATH_AVES, "wb") as f:
                 pickle.dump(st.session_state["dados_aves_sistema"], f)
             st.success("Ave cadastrada com sucesso!"); st.rerun()
-
 st.write("---")
 st.markdown("### 🏆 Aves Registradas no Sistema")
 
-if is_master_admin:
+# RESTRIÇÃO MUDADA AQUI: Apenas o perfil estrito de 'master' enxerga o banco de dados completo de todo mundo
+if role_atual == "master" or usuario_logado == "master":
     st.dataframe(df_aves, hide_index=True, use_container_width=True)
 else:
+    # Diretoria e Sócios comuns caem aqui e enxergam apenas as suas próprias aves vinculadas
     df_f = df_aves[df_aves["Proprietário"] == socio_vinculado] if not df_aves.empty else pd.DataFrame()
     st.dataframe(df_f, hide_index=True, use_container_width=True)
 
-# --- NOVO: CENTRAL DE BACKUP DO PLANTEL EXCLUSIVA PARA O MASTER ---
-if role_atual == "master":
+# --- CENTRAL DE BACKUP DO PLANTEL EXCLUSIVA PARA O MASTER ---
+if role_atual == "master" or usuario_logado == "master":
     st.write("---")
     st.markdown("### 💾 Central de Segurança do Plantel (Exclusivo Master)")
     cb_exp, cb_imp = st.columns(2)
@@ -82,7 +83,7 @@ if role_atual == "master":
         if arq_sub_aves:
             try:
                 aves_carregadas = pickle.load(arq_sub_aves)
-                if st.button("🔄 Confirmar Restauração do Plantel Geral", use_container_width=True, type="secondary"):
+                if st.button("🔄 Confirmar Restauração do Plantel Geral", use_container_width=True, type="primary"):
                     st.session_state["dados_aves_sistema"] = aves_carregadas
                     with open(PATH_AVES, "wb") as f:
                         pickle.dump(aves_carregadas, f)
