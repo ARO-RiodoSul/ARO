@@ -2,24 +2,23 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
-# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
-
-# TRAVA PARA FORÇAR A LOGO E NOME NO CELULAR
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
-# CAMINHOS ABSOLUTOS PADRONIZADOS NA RAIZ DO PROJETO
-PATH_USUARIOS = os.path.abspath("backup_usuarios.pkl")
-PATH_SOCIOS = os.path.abspath("backup_socios.csv")
+# SOLUÇÃO DEFINITIVA: Utiliza a pasta temporária do Linux para garantir permissão de escrita no Streamlit Cloud
+PATH_USUARIOS = "/tmp/backup_usuarios.pkl"
+PATH_SOCIOS = "/tmp/backup_socios.csv"
 
-# --- INICIALIZAÇÃO DO BANCO DE LOGINS DINÂMICOS ---
+# Se o arquivo não existir na pasta temporária, tenta ler a versão inicial que você criou no GitHub
 if "banco_usuarios_dinamicos" not in st.session_state:
     if os.path.exists(PATH_USUARIOS):
         try:
-            with open(PATH_USUARIOS, "rb") as f: 
-                st.session_state["banco_usuarios_dinamicos"] = pickle.load(f)
-        except: 
-            st.session_state["banco_usuarios_dinamicos"] = {}
+            with open(PATH_USUARIOS, "rb") as f: st.session_state["banco_usuarios_dinamicos"] = pickle.load(f)
+        except: st.session_state["banco_usuarios_dinamicos"] = {}
+    elif os.path.exists("backup_usuarios.pkl"):
+        try:
+            with open("backup_usuarios.pkl", "rb") as f: st.session_state["banco_usuarios_dinamicos"] = pickle.load(f)
+        except: st.session_state["banco_usuarios_dinamicos"] = {}
     else:
         st.session_state["banco_usuarios_dinamicos"] = {
             "Socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
@@ -58,7 +57,7 @@ if not st.session_state["autenticado"]:
             else:
                 st.error("Usuário ou senha incorretos.")
                 
-    st.write("<p style='text-align: center; color: gray; margin: 5px 0;'>Ou se você é apenas um visitante do evento:</p>", unsafe_allow_html=True)
+    st.write("<p style='text-align: center; color: gray; margin: 5px 0;'>Ou se você é apenas um visitor do evento:</p>", unsafe_allow_html=True)
     if st.button("🌐 Entrar como Convidado / Visitante", use_container_width=True):
         st.session_state.update({"autenticado": True, "user_role": "visitante", "username": "Visitante Convidado"})
         st.rerun()
@@ -66,7 +65,12 @@ if not st.session_state["autenticado"]:
 
 # --- SE ESTIVER AUTENTICADO ---
 if "dados_socios_internos" not in st.session_state:
-    st.session_state["dados_socios_internos"] = pd.read_csv(PATH_SOCIOS) if os.path.exists(PATH_SOCIOS) else pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
+    if os.path.exists(PATH_SOCIOS):
+        st.session_state["dados_socios_internos"] = pd.read_csv(PATH_SOCIOS)
+    elif os.path.exists("backup_socios.csv"):
+        st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv")
+    else:
+        st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
 
 df_socios_global = st.session_state["dados_socios_internos"]
 
@@ -88,11 +92,6 @@ elif role == "socio": st.info("👥 Modo Sócio: Acesso de Consulta a Torneios A
 else: st.info("ℹ️ Modo Visitante: Acesso Limitado Ativado")
 
 st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
-
-if role in ["master", "diretoria"]:
-    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para navegar entre as planilhas de Sócios, Finanças e Torneios.</p>", unsafe_allow_html=True)
-else:
-    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para visualizar a página de **Torneios**.</p>", unsafe_allow_html=True)
 
 # --- CENTRAL DE CADASTRO E EXCLUSÃO DINÂMICA DE LOGINS ---
 if role == "master":
