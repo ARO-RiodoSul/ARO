@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
+# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
 
+# FORÇAR A LOGO E O NOME "ARO" NO ÍCONE DO CELULAR
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"><meta name="apple-mobile-web-app-title" content="ARO"><meta name="application-name" content="ARO"></head>""", unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state:
@@ -11,7 +13,7 @@ if "autenticado" not in st.session_state:
 
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"): st.columns(3)[1].image("logo.png", use_container_width=True)
+    if os.path.exists("logo.png"): st.columns(3).image("logo.png", use_container_width=True)
     else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
         u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
@@ -21,10 +23,23 @@ if not st.session_state["autenticado"]:
             else: st.error("Incorreto.")
     st.stop()
 
+# --- 1. CONFIGURAÇÃO DA MEMÓRIA DE SÓCIOS (TRAVADO EM 20 INICIAIS) ---
 if "dados_socios_internos" not in st.session_state:
-    st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+    if os.path.exists("backup_socios.csv"):
+        df_carregado = pd.read_csv("backup_socios.csv")
+        # Se o backup estiver limpo ou com tamanho antigo (100 linhas), reseta estritamente para 20
+        if len(df_carregado) > 20 and df_carregado["Nome"].isna().all():
+            df_carregado = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+            df_carregado.to_csv("backup_socios.csv", index=False)
+        st.session_state["dados_socios_internos"] = df_carregado
+    else:
+        st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
 
-lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in [2027, 2028] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
+# --- 2. CRONOLOGIA FINANCEIRA AJUSTADA ---
+lista_meses = ["Dezembro 2026"]
+for a in ["2027", "2028"]:
+    for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]:
+        lista_meses.append(f"{m} {a}")
 
 if "saldo_anterior_master" not in st.session_state:
     if os.path.exists("backup_saldo_ant.txt"):
@@ -64,13 +79,15 @@ elif st.session_state["tela_atual"] == "socios":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("👥 Controle de Sócios")
     if st.session_state["user_role"] == "master":
-        if st.button("♻️ Forçar Ajuste para Reduzir para 20 Linhas"):
+        if st.button("♻️ Forçar Limpeza (Resetar estritamente para 20 linhas vazias)"):
             st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
             st.session_state["dados_socios_internos"].to_csv("backup_socios.csv", index=False); st.rerun()
+            
         df_m = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"])}, hide_index=True)
         if not df_m.equals(st.session_state["dados_socios_internos"]): 
             st.session_state["dados_socios_internos"] = df_m
             df_m.to_csv("backup_socios.csv", index=False); st.toast("💾 Salvo!"); st.rerun()
+            
         if st.button("➕ Adicionar Linha para Novo Sócio"):
             p_n = len(st.session_state["dados_socios_internos"]) + 1
             n_l = pd.DataFrame([{"Número": p_n, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"}])
@@ -114,11 +131,3 @@ elif st.session_state["tela_atual"] == "caixa":
                 e_x, s_x, m_x = ce.number_input("Entrada", min_value=0.0, format="%.2f"), cs.number_input("Saída", min_value=0.0, format="%.2f"), cm.text_input("Motivo")
                 if st.form_submit_button("Inserir") and (e_x > 0 or s_x > 0):
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
-                    pickle.dump(st.session_state["dados_meses_financeiros"], open("backup_financas.pkl", "wb"))
-                    st.toast("💾 Salvo!"); st.rerun()
-    else:
-        st.dataframe(df_m_at, use_container_width=True, hide_index=True)
-    st.markdown("---")
-    m_e = pd.to_numeric(df_m_at["Entradas"], errors='coerce').sum()
-    m_s = pd.to_numeric(df_m_at["Saídas"], errors='coerce').sum()
-    st.write(f"📊 **Mês Atual - Entradas:** R$ {m_e:,.2f} | **Saídas:** R$ {m_s:,.2f} | **Líquido:** R$ {(m_e - m_s):,.2f}")
