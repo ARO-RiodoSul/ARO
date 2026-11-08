@@ -7,26 +7,22 @@ import os
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
-# RESOLUÇÃO DO CAMINHO ABSOLUTO SEGURO PARA A LOGO E BACKUPS
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 
-# --- INICIALIZAÇÃO DO BANCO DE LOGINS NA MEMÓRIA ---
 if "banco_usuarios_dinamicos" not in st.session_state:
     st.session_state["banco_usuarios_dinamicos"] = {
-        "Socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
-        "Visitante": {"senha": "aro999", "role": "visitante", "socio_vinculado": "Nenhum"}
+        "socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
+        "visitante": {"senha": "aro999", "role": "visitante", "socio_vinculado": "Nenhum"}
     }
 
 usuarios_cadastrados = st.session_state["banco_usuarios_dinamicos"]
 
-# --- SISTEMA DE LOGIN SEGURO ---
 if "autenticado" not in st.session_state:
-    st.session_state.update({"autenticado": False, "user_role": "visitante"})
+    st.session_state.update({"autenticado": False, "user_role": "visitante", "username": ""})
 
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    # BLINDAGEM DA LOGO NA TELA DE LOGIN
     if os.path.exists(LOGO_PATH):
         _, col_img, _ = st.columns(3)
         col_img.image(LOGO_PATH, use_container_width=True)
@@ -35,21 +31,38 @@ if not st.session_state["autenticado"]:
     st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
     
     with st.form("t_login"):
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
+        # CORREÇÃO CHAVE: Remove espaços antes e depois do texto digitado no celular
+        u_input = st.text_input("Usuário").strip()
+        s_input = st.text_input("Senha", type="password").strip()
+        
         if st.form_submit_button("Entrar"):
-            if u == "Junior Rebelo" and s == "270688":
+            # Converte o input para minúsculo para comparar sem erro de digitação
+            u_f = u_input.lower()
+            
+            if u_input == "Junior Rebelo" and s_input == "270688":
                 st.session_state.update({"autenticado": True, "user_role": "master", "username": "Junior Rebelo"})
                 st.rerun()
-            elif u in ["Kleven", "Valter", "Peterson", "Mauro"] and s == {"Kleven": "12345678", "Valter": "021277", "Peterson": "100693", "Mauro": "120660"}[u]:
-                st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": u})
+            elif u_f in ["kleven", "valter", "peterson", "mauro"] and s_input == {"kleven": "12345678", "valter": "021277", "peterson": "100693", "mauro": "120660"}[u_f]:
+                # Resgata o nome com a primeira letra maiúscula correta
+                nome_correto = u_f.capitalize()
+                st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": nome_correto})
                 st.rerun()
-            elif u == "Vanderlei" and s == "251073":
+            elif u_f == "vanderlei" and s_input == "251073":
                 st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": "Vanderlei"})
                 st.rerun()
-            elif u in usuarios_cadastrados and usuarios_cadastrados[u]["senha"] == s:
-                st.session_state.update({"autenticado": True, "user_role": usuarios_cadastrados[u]["role"], "username": u})
-                st.rerun()
+            # BUSCA INTELIGENTE: Ignora maiúsculas/minúsculas nos logins criados por você
+            elif u_f in [k.lower() for k in usuarios_cadastrados.keys()]:
+                # Encontra a chave original correspondente dentro do banco
+                chave_original = [k for k in usuarios_cadastrados.keys() if k.lower() == u_f][0]
+                if usuarios_cadastrados[chave_original]["senha"] == s_input:
+                    st.session_state.update({
+                        "autenticado": True, 
+                        "user_role": usuarios_cadastrados[chave_original]["role"], 
+                        "username": chave_original
+                    })
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha incorretos.")
             else:
                 st.error("Usuário ou senha incorretos.")
                 
@@ -66,7 +79,6 @@ if "dados_socios_internos" not in st.session_state:
 df_socios_global = st.session_state["dados_socios_internos"]
 
 c_l, c_t, c_o = st.columns(3)
-# BLINDAGEM DA LOGO NO TOPO DO MENU LOGADO
 try:
     if os.path.exists(LOGO_PATH): c_l.image(LOGO_PATH, width=80)
 except: pass
@@ -112,7 +124,7 @@ if role == "master":
                 
             if st.form_submit_button("Salvar Usuário", use_container_width=True):
                 if novo_u.strip() and novo_s.strip():
-                    if novo_u.strip() in ["Junior Rebelo", "Kleven", "Valter", "Peterson", "Mauro", "Vanderlei"]:
+                    if novo_u.strip().lower() in ["junior rebelo", "kleven", "valter", "peterson", "mauro", "vanderlei"]:
                         st.error("Nome de usuário reservado!")
                     elif tipo_role == "Sócio" and socio_vinc == "Selecione o Sócio...":
                         st.error("Selecione qual sócio oficial será vinculado!")
