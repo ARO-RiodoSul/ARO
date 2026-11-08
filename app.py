@@ -2,8 +2,14 @@ import streamlit as st
 import pandas as pd
 import pickle
 import io
+import os
 
-st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png", layout="wide")
+st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
+st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
+
+# RESOLUÇÃO DO CAMINHO ABSOLUTO SEGURO PARA A LOGO E BACKUPS
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 
 # --- INICIALIZAÇÃO DO BANCO DE LOGINS NA MEMÓRIA ---
 if "banco_usuarios_dinamicos" not in st.session_state:
@@ -19,7 +25,14 @@ if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "visitante"})
 
 if not st.session_state["autenticado"]:
-    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    # BLINDAGEM DA LOGO NA TELA DE LOGIN
+    if os.path.exists(LOGO_PATH):
+        _, col_img, _ = st.columns(3)
+        col_img.image(LOGO_PATH, use_container_width=True)
+    else:
+        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
     
     with st.form("t_login"):
         u = st.text_input("Usuário")
@@ -53,6 +66,11 @@ if "dados_socios_internos" not in st.session_state:
 df_socios_global = st.session_state["dados_socios_internos"]
 
 c_l, c_t, c_o = st.columns(3)
+# BLINDAGEM DA LOGO NO TOPO DO MENU LOGADO
+try:
+    if os.path.exists(LOGO_PATH): c_l.image(LOGO_PATH, width=80)
+except: pass
+
 c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
 if c_o.button("🔒 Sair do Painel", use_container_width=True):
     st.session_state["autenticado"] = False
@@ -60,9 +78,19 @@ if c_o.button("🔒 Sair do Painel", use_container_width=True):
 
 st.markdown("---")
 role = st.session_state["user_role"]
+if role == "master": st.info("⭐ Modo Administrador: Acesso Master Ativado")
+elif role == "diretoria": st.info("🛡️ Modo Diretoria: Acesso Administrativo Parcial Ativado")
+elif role == "socio": st.info("👥 Modo Sócio: Acesso de Consulta a Torneios Ativado")
+else: st.info("ℹ️ Modo Visitante: Acesso Limitado Ativado")
+
 st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
 
-# --- CENTRAL DE CADASTRO E BACKUP DINÂMICO DE LOGINS (EXCLUSIVO MASTER) ---
+if role in ["master", "diretoria"]:
+    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para navegar entre as planilhas de Sócios, Finanças e Torneios.</p>", unsafe_allow_html=True)
+else:
+    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para visualizar a página de **Torneios**.</p>", unsafe_allow_html=True)
+
+# --- CENTRAL DE CADASTRO DINÂMICO DE LOGINS (EXCLUSIVO MASTER) ---
 if role == "master":
     st.write("---")
     st.markdown("### 🔑 Central de Gerenciamento de Acessos")
@@ -90,7 +118,7 @@ if role == "master":
                         st.error("Selecione qual sócio oficial será vinculado!")
                     else:
                         st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {"senha": novo_s.strip(), "role": "socio" if tipo_role == "Sócio" else "visitante", "socio_vinculado": socio_vinc}
-                        st.success("Usuário salvo na memória viva!")
+                        st.success("Usuário salvo na memória viva com sucesso!")
                         st.rerun()
                 else: st.error("Preencha todos os campos!")
                     
@@ -112,7 +140,7 @@ if role == "master":
                     st.rerun()
                 else: st.error("Marque o quadrado de confirmação antes de deletar!")
 
-    # --- NOVO: CENTRAL DE SEGUROS FIXA DE USUÁRIOS CONTRA REBOOTS ---
+    # CENTRAL DE SEGUROS FIXA DE USUÁRIOS
     st.write("---")
     st.markdown("### 💾 Backup das Credenciais de Acesso")
     col_uback_1, col_fback_2 = st.columns(2)
