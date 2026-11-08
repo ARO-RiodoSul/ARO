@@ -43,28 +43,20 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ==============================================================================
-# PAINEL INTERNO ARO RIO DO SUL (APÓS LOGIN)
+# PAINEL INTERNO ARO RIO DO SUL (INDEPENDENTE DE PLANILHA)
 # ==============================================================================
 
 if "tela_atual" not in st.session_state:
     st.session_state["tela_atual"] = "menu"
 
-# CONEXÃO DIRETA COM O GOOGLE SHEETS
-try:
-    url_base = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    if "/edit" in url_base:
-        link_limpo = url_base.split("/edit")[0]
-    else:
-        link_limpo = url_base
-        
-    url_socios = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Socios"
-    url_financeiro = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Financeiro"
-
-    df_socios_web = pd.read_csv(url_socios)
-    df_financeiro = pd.read_csv(url_financeiro)
-except Exception as e:
-    st.error("Erro ao conectar à planilha. Verifique se o link está público e correto nos Secrets.")
-    st.stop()
+# INICIALIZAÇÃO DA ESTRUTURA FIXA INTERNA DE 100 SÓCIOS (MEMÓRIA DO APP)
+if "dados_socios_internos" not in st.session_state:
+    linhas_fixas = []
+    for i in range(1, 101):
+        linhas_fixas.append({
+            "Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"
+        })
+    st.session_state["dados_socios_internos"] = pd.DataFrame(linhas_fixas)
 
 # --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
@@ -104,47 +96,24 @@ if st.session_state["tela_atual"] == "menu":
             st.session_state["tela_atual"] = "caixa"
             st.rerun()
 
-# --- TELA 2: SÓCIOS (REESTRUTURADO CONFORME AS ESPECIFICAÇÕES) ---
+# --- TELA 2: SÓCIOS (100% AUTÔNOMO E EDITÁVEL) ---
 elif st.session_state["tela_atual"] == "socios":
     if st.button("⬅️ Voltar ao Menu"):
         st.session_state["tela_atual"] = "menu"
         st.rerun()
         
-    st.title("👥 Controle de Sócios (ARO)")
+    st.title("👥 Controle de Sócios")
     st.markdown("---")
     
-    # Montagem da estrutura de 1 a 100 linhas fixas
-    linhas_fixas = []
-    for i in range(1, 101):
-        # Tenta buscar os dados existentes vindos da planilha
-        if i - 1 < len(df_socios_web):
-            dados_linha = df_socios_web.iloc[i - 1]
-            linhas_fixas.append({
-                "Número": i,
-                "ID": dados_linha.get("ID", ""),
-                "Nome": dados_linha.get("Nome", ""),
-                "Telefone": dados_linha.get("Telefone", ""),
-                "CPF": dados_linha.get("CPF", ""),
-                "CTF": dados_linha.get("CTF", ""),
-                "Status": dados_linha.get("Status", "Ativo")
-            })
-        else:
-            # Preenche linhas vazias caso a planilha ainda não tenha 100 registros
-            linhas_fixas.append({
-                "Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"
-            })
-            
-    df_estrutura_socios = pd.DataFrame(linhas_fixas)
-    
-    # TRAVA DE SEGURANÇA: Se não for o usuário master, a tabela fica bloqueada para alterações
+    # Exibe orientações dinâmicas para o usuário master
     if st.session_state["user_role"] == "master":
-        st.success("📝 Você está logado como Master. Edição de colunas liberada abaixo:")
+        st.success("📝 Modo Master Ativo: Clique diretamente nas células abaixo para preencher os dados dos 100 sócios.")
         
-        # Torna a tabela totalmente editável na tela pelo usuário Master
-        df_editado = st.data_editor(
-            df_estrutura_socios,
+        # Editor interativo direto na tela atualizado na memória interna
+        df_modificado = st.data_editor(
+            st.session_state["dados_socios_internos"],
             use_container_width=True,
-            disabled=["Número"], # Primeira coluna 'Número' é protegida e auto-incremental
+            disabled=["Número"],  # Protege o contador automático de 1 a 100
             column_config={
                 "Status": st.column_config.SelectboxColumn(
                     "Status",
@@ -152,16 +121,21 @@ elif st.session_state["tela_atual"] == "socios":
                     required=True
                 )
             },
-            hide_index=True
+            hide_index=True,
+            key="editor_socios_aro"
         )
         
-        # Botão auxiliar para sincronizar ou gerenciar dados com o Drive
-        with st.expander("📂 Sincronização e Ajustes manuais com a Planilha"):
-            st.markdown(f"Abra a sua planilha do Google Drive para consolidar alterações em massa ou copiar dados:")
-            st.markdown(f"[➡️ Abrir Planilha Google Sheets]({url_base})")
+        # Salva as alterações na memória interna do aplicativo de forma contínua
+        st.session_state["dados_socios_internos"] = df_modificado
+        
+        # Ferramentas locais de ajuste da tabela interna
+        with st.expander("⚙️ Opções de Ajuste do Módulo"):
+            if st.button("♻️ Resetar Tabela (Apagar as 100 Linhas)"):
+                del st.session_state["dados_socios_internos"]
+                st.rerun()
     else:
-        st.warning("🔒 Visualização restrita. Somente o usuário Master pode editar estas colunas.")
-        st.dataframe(df_estrutura_socios, use_container_width=True, hide_index=True)
+        st.warning("🔒 Modo de Visualização Restrito. Somente o usuário Master pode realizar alterações.")
+        st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
 
 # --- TELA 3: FINANÇAS ---
 elif st.session_state["tela_atual"] == "caixa":
@@ -171,21 +145,5 @@ elif st.session_state["tela_atual"] == "caixa":
         
     st.title("🪙 Finanças")
     st.markdown("---")
-    
-    entradas, saidas, saldo_atual = 0.0, 0.0, 0.0
-    if not df_financeiro.empty:
-        df_financeiro.columns = [c.strip().title() for c in df_financeiro.columns]
-        if "Tipo" in df_financeiro.columns and "Valor" in df_financeiro.columns:
-            df_financeiro["Valor"] = pd.to_numeric(df_financeiro["Valor"], errors='coerce').fillna(0)
-            entradas = df_financeiro[df_financeiro['Tipo'] == 'Entrada']['Valor'].sum()
-            saidas = df_financeiro[df_financeiro['Tipo'] == 'Saída']['Valor'].sum()
-            saldo_atual = entradas - saidas
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric(label="🟢 Total de Entradas", value=f"R$ {entradas:,.2f}")
-    col2.metric(label="🔴 Total de Saídas", value=f"R$ {saidas:,.2f}")
-    col3.metric(label="💰 Saldo Atual em Caixa", value=f"R$ {saldo_atual:,.2f}")
-    st.markdown("---")
-    
-    st.dataframe(df_financeiro, use_container_width=True)
+    st.info("Módulo financeiro pronto para desenvolvimento interno personalizado. Nenhuma planilha externa conectada.")
 
