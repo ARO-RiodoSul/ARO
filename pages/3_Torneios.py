@@ -19,7 +19,7 @@ usuario_logado = str(st.session_state.get("username", "")).strip().lower()
 is_admin = role_atual in ["master", "diretoria", "admin"] or usuario_logado in ["master", "admin"]
 
 usuarios_dinamicos = st.session_state.get("banco_usuarios_dinamicos", {})
-socio_vinculado = "Administração" if is_admin else usuarios_dinamicos.get(usuario_logado, {}).get("socio_vinculado", usuario_logado)
+socio_vinculado = "Administração" if is_admin else usuarios_dinamicos.get(st.session_state.get("username"), {}).get("socio_vinculado", st.session_state.get("username"))
 
 ARQUIVO_CONFIRMADOS = "inscricoes_confirmadas.pkl"
 ARQUIVO_PENDENTES = "inscricoes_pendentes.pkl"
@@ -34,13 +34,15 @@ def carregar_dados_fisicos():
         with open(ARQUIVO_PENDENTES, "rb") as f: st.session_state["inscricoes_pendentes_aro"] = pickle.load(f)
     else: st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
 
-    st.session_state["torneio_ativo_data"] = pickle.load(open(ARQUIVO_EVENTO, "rb")) if os.path.exists(ARQUIVO_EVENTO) else None
+    if os.path.exists(ARQUIVO_EVENTO):
+        with open(ARQUIVO_EVENTO, "rb") as f: st.session_state["torneio_ativo_data"] = pickle.load(f)
+    else: st.session_state["torneio_ativo_data"] = None
 
 def salvar_dados_fisicos():
-    pickle.dump(st.session_state["dados_torneios_internos"], open(ARQUIVO_CONFIRMADOS, "wb"))
-    pickle.dump(st.session_state["inscricoes_pendentes_aro"], open(ARQUIVO_PENDENTES, "wb"))
+    with open(ARQUIVO_CONFIRMADOS, "wb") as f: pickle.dump(st.session_state["dados_torneios_internos"], f)
+    with open(ARQUIVO_PENDENTES, "wb") as f: pickle.dump(st.session_state["inscricoes_pendentes_aro"], f)
     if st.session_state["torneio_ativo_data"] is not None:
-        pickle.dump(st.session_state["torneio_ativo_data"], open(ARQUIVO_EVENTO, "wb"))
+        with open(ARQUIVO_EVENTO, "wb") as f: pickle.dump(st.session_state["torneio_ativo_data"], f)
     elif os.path.exists(ARQUIVO_EVENTO): os.remove(ARQUIVO_EVENTO)
 
 carregar_dados_fisicos()
@@ -62,43 +64,44 @@ if torneio_data is not None:
     for i, esp in enumerate(especies_validas): cols[i].metric(label=esp, value=str(contagem[esp]))
     st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
-def sortear_estaca(especie):
-    ocupadas = []
-    if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
-        df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == especie]
-        ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
-    lim = 50 if especie in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if especie in ["Canário", "Azulão"] else 5)
-    livres = [x for x in range(1, lim + 1) if x not in ocupadas]
-    return random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
-
-if is_admin and torneio_data is not None and not df_pendentes_atual.empty:
+if is_admin and torneio_data is not None:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
-    for idx, row in df_pendentes_atual.iterrows():
-        with st.container():
-            c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
-            c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
-            if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
-                estaca = sortear_estaca(row["Espécie"])
-                nova_c = pd.DataFrame([{"Proprietário": row["Proprietário"], "Nome da Ave": row["Nome da Ave"], "Espécie": row["Espécie"], "Anilha": row["Anilha"], "Estaca": int(estaca), "Valor": row["Valor"], "Clube": row.get("Clube", "Outro")}])
-                st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_c], ignore_index=True)
-                st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
-                salvar_dados_fisicos(); st.success("Aprovada!"); st.rerun()
-            if c_b2.button("❌ Recusar", key=f"re_{idx}", use_container_width=True):
-                st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
-                salvar_dados_fisicos(); st.warning("Recusada!"); st.rerun()
-
+    if df_pendentes_atual.empty:
+        st.caption("Nenhuma solicitação pendente no momento.")
+    else:
+        for idx, row in df_pendentes_atual.iterrows():
+            with st.container():
+                c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
+                c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
+                if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
+                    ocupadas = []
+                    if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
+                        df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == row["Espécie"]]
+                        ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
+                    lim = 50 if row["Espécie"] in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if row["Espécie"] in ["Canário", "Azulão"] else 5)
+                    livres = [x for x in range(1, lim + 1) if x not in ocupadas]
+                    sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
+                    nova_c = pd.DataFrame([{"Proprietário": row["Proprietário"], "Nome da Ave": row["Nome da Ave"], "Espécie": row["Espécie"], "Anilha": row["Anilha"], "Estaca": int(sorteio), "Valor": row["Valor"], "Clube": row.get("Clube", "Outro")}])
+                    st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_c], ignore_index=True)
+                    st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
+                    salvar_dados_fisicos()
+                    st.success("Aprovada!"); st.rerun()
+                if c_b2.button("❌ Recusar", key=f"re_{idx}", use_container_width=True):
+                    st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
+                    salvar_dados_fisicos()
+                    st.warning("Recusada!"); st.rerun()
 if torneio_data is not None:
     st.write("---")
     st.markdown("### 📋 Minhas Inscrições")
     lista_status = []
     if not df_pendentes_atual.empty:
-        for _, r in df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado].iterrows():
-            lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
+        filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
+        for _, r in filtrado_p.iterrows(): lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
     if not df_inscritos_atual.empty:
-        for _, r in df_inscritos_atual[df_inscritos_atual["Proprietário"] == socio_vinculado].iterrows():
-            lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Confirmado"})
-    if not lista_status: st.caption("Nenhuma ave cadastrada por você.")
+        filtrado_i = df_inscritos_atual[df_inscritos_atual["Proprietário"] == socio_vinculado]
+        for _, r in filtrado_i.iterrows(): lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Inscrito Confirmado"})
+    if len(lista_status) == 0: st.caption("Você não possui nenhuma ave cadastrada neste torneio.")
     else: st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
     st.write("---")
@@ -110,12 +113,13 @@ if torneio_data is not None:
         with st.form("form_sol_insc", clear_on_submit=False):
             lista_opcoes = [f"{r['Nome da Ave']} ({r['Espécie']}) - Anilha: {r['Anilha']} | Dono: {r['Proprietário']}" for _, r in df_disp.iterrows()]
             ave_sel = st.selectbox("Selecione a Ave:", lista_opcoes)
-            is_socio = st.selectbox("Sócio da ARO?", ["Sim", "Não"])
+            is_socio_clube = st.selectbox("Sócio da ARO?", ["Sim", "Não"])
             if st.form_submit_button("Enviar Solicitação", use_container_width=True):
                 ave_obj = df_disp.iloc[lista_opcoes.index(ave_sel)]
-                nova_s = pd.DataFrame([{"Proprietário": ave_obj["Proprietário"], "Nome da Ave": ave_obj["Nome da Ave"], "Espécie": ave_obj["Espécie"], "Anilha": ave_obj["Anilha"], "Valor": 25.0 if is_socio == "Sim" else 35.0, "Clube": "ARO" if is_socio == "Sim" else "Outro"}])
+                nova_s = pd.DataFrame([{"Proprietário": ave_obj["Proprietário"], "Nome da Ave": ave_obj["Nome da Ave"], "Espécie": ave_obj["Espécie"], "Anilha": ave_obj["Anilha"], "Valor": 25.0 if is_socio_clube == "Sim" else 35.0, "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"}])
                 st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
-                salvar_dados_fisicos(); st.success("🎯 Solicitado!"); st.rerun()
+                salvar_dados_fisicos()
+                st.success("🎯 Solicitado com sucesso!"); st.rerun()
 
     st.write("---")
     st.markdown("### 🏆 Competidores Confirmados por Categoria")
@@ -134,8 +138,8 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
     for idx, r in df_inscritos.reset_index(drop=True).iterrows():
         pos = idx % 8
         if pos == 0 and idx > 0: canvas_obj.showPage()
-        x = m_x + ((pos % 2) * f_w)
-        y = m_y + ((3 - (pos // 2)) * f_h)
+        col, lin = pos % 2, 3 - (pos // 2)
+        x, y = m_x + (col * f_w), m_y + (lin * f_h)
         clube_ficha = "ARO" if str(r.get("Clube", "")).upper() == "ARO" else "Outro"
         v_str = "R$ 25,00" if clube_ficha == "ARO" else "R$ 35,00"
         est_str = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
@@ -155,3 +159,63 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
         canvas_obj.drawString(x + 0.4*cm, y + 1.0*cm, f"CLUBE: {clube_ficha}")
         canvas_obj.drawString(x + 0.4*cm, y + 0.3*cm, f"ANILHA: {str(r['Anilha']).upper()}")
         canvas_obj.setFont("Helvetica-Bold", 12)
+        canvas_obj.drawString(x + 5.8*cm, y + 0.3*cm, f"VALOR: {v_str}")
+    canvas_obj.save(); buf.seek(0)
+    return buf
+
+if role_atual == "master":
+    st.write("---")
+    st.markdown("### ⚙️ Painel de Controle de Eventos (Master)")
+    if torneio_data is None:
+        st.markdown("#### 🟢 Abrir Nova Temporada / Torneio")
+        data_nova_criar = st.date_input("Escolha a data do novo Torneio:", value=datetime.date(2026, 11, 15), format="DD/MM/YYYY")
+        if st.button("🚀 ABRIR E LIBERAR INSCRIÇÕES", use_container_width=True, type="primary"):
+            st.session_state["torneio_ativo_data"] = data_nova_criar
+            st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
+            st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
+            salvar_dados_fisicos(); st.success("Torneio liberado!"); st.rerun()
+    else:
+        cbt1, cbt2 = st.columns(2)
+        with cbt1:
+            st.markdown("**🖨️ Impressão de Fichas**")
+            if not df_inscritos_atual.empty:
+                pdf_p = gerar_pdf_fichas_canvas(df_inscritos_atual, torneio_data)
+                st.download_button(label="📥 Imprimir Todas as Fichas (A4)", data=pdf_p, file_name="fichas_completas_aro.pdf", mime="application/pdf", use_container_width=True)
+            else: st.caption("Nenhuma ave confirmada.")
+        with cbt2:
+            st.markdown("**🚨 Encerrar Evento Atual**")
+            if st.checkbox("Habilitar botão de fechamento definitivo"):
+                if st.button("💥 EXCLUIR E FECHAR TORNEIO", use_container_width=True, type="primary"):
+                    st.session_state["torneio_ativo_data"] = None
+                    st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
+                    st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
+                    salvar_dados_fisicos(); st.success("Torneio encerrado!"); st.rerun()
+
+        st.write("---")
+        st.markdown("### ➕ Inscrição Manual Rápida")
+        with st.form("form_manual_master", clear_on_submit=True):
+            m_prop, m_ave = st.text_input("Nome do Proprietário:"), st.text_input("Nome da Ave:")
+            m_esp, m_anilha = st.selectbox("Espécie:", especies_validas), st.text_input("Número da Anilha:")
+            m_socio = st.selectbox("Sócio da ARO?", ["Sim", "Não"], index=1)
+            if st.form_submit_button("⚡ Inscrever Ave Manualmente", use_container_width=True):
+                if m_prop and m_ave and m_anilha:
+                    ocupadas = []
+                    if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
+                        df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == m_esp]
+                        ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
+                    lim = 50 if m_esp in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if m_esp in ["Canário", "Azulão"] else 5)
+                    livres = [x for x in range(1, lim + 1) if x not in ocupadas]
+                    sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
+                    nova_m = pd.DataFrame([{"Proprietário": m_prop.strip(), "Nome da Ave": m_ave.strip(), "Espécie": m_esp, "Anilha": m_anilha.strip(), "Estaca": int(sorteio), "Valor": 25.0 if m_socio == "Sim" else 35.0, "Clube": "ARO" if m_socio == "Sim" else "Outro"}])
+                    st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_m], ignore_index=True)
+                    salvar_dados_fisicos(); st.success(f"✅ Ave inserida na Estaca {sorteio}!"); st.rerun()
+
+        if not df_inscritos_atual.empty:
+            st.write("---")
+            st.markdown("### 🗑️ Cancelamento Manual Individual")
+            opc_lista = [f"[{r['Espécie']}] Estaca {r['Estaca']} - {r['Nome da Ave']} ({r['Proprietário']})" for _, r in df_inscritos_atual.iterrows()]
+            ave_remover = st.selectbox("Escolha uma ave para deletar:", opc_lista)
+            if st.checkbox("Confirmo a exclusão desta ave isolada"):
+                if st.button("❌ Excluir Ave Selecionada", use_container_width=True):
+                    st.session_state["dados_torneios_internos"] = df_inscritos_atual.drop(df_inscritos_atual.index[opc_lista.index(ave_remover)]).reset_index(drop=True)
+                    salvar_dados_fisicos(); st.success("Ave removida!"); st.rerun()
