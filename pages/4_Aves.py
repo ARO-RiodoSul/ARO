@@ -92,3 +92,19 @@ if is_master_strict:
             except: 
                 st.error("Arquivo inválido ou corrompido.")
 
+    # --- NOVO: BOTÃO DE REMOÇÃO EXCLUSIVO DO MASTER NO RODAPÉ ---
+    if not df_aves.empty:
+        st.write("---")
+        st.markdown("### 🗑️ Cancelamento Manual Individual (Master)")
+        opc_lista = [f"[{r['Espécie']}] {r['Nome da Ave']} - Anilha: {r['Anilha']} ({r['Proprietário']})" for _, r in df_aves.iterrows()]
+        ave_remover = st.selectbox("Escolha uma ave cadastrada no sistema para deletar:", opc_lista)
+        
+        if st.checkbox("Confirmo a exclusão definitiva desta ave do plantel global"):
+            if st.button("❌ Excluir Ave do Sistema", use_container_width=True):
+                idx_alvo = opc_lista.index(ave_remover)
+                df_remanescente = df_aves.drop(df_aves.index[idx_alvo]).reset_index(drop=True)
+                st.session_state["dados_aves_sistema"] = df_remanescente
+                with open(PATH_AVES, "wb") as f:
+                    pickle.dump(df_remanescente, f)
+                st.success("Ave removida e sincronizada no servidor com sucesso!"); st.rerun()
+
