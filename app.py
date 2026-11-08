@@ -127,20 +127,30 @@ elif st.session_state["tela_atual"] == "caixa":
     st.title("🪙 Controle Financeiro - Finanças")
     st.markdown("---")
     
-    # INDICADORES SUPERIORES
-    met_1, met_2, met_3, met_4, met_5 = st.columns(5)
+    # === REESTRUTURAÇÃO DO LAYOUT DOS INDICADORES ===
     
-    with met_1:
-        st.markdown("### 🏦 Saldo Anterior")
+    # 1. Topo: Saldo Anterior (Sozinho em cima)
+    col_anterior_esq, col_anterior_meio, col_anterior_dir = st.columns([1, 2, 1])
+    with col_anterior_meio:
+        st.markdown("<h3 style='text-align: center;'>🏦 Saldo Anterior</h3>", unsafe_allow_html=True)
         if st.session_state["user_role"] == "master":
             st.session_state["saldo_anterior_master"] = st.number_input("Editar Valor (R$)", value=st.session_state["saldo_anterior_master"], step=50.0, format="%.2f", label_visibility="collapsed")
         else:
-            st.markdown(f"**R$ {st.session_state['saldo_anterior_master']:,.2f}**")
+            st.markdown(f"<h4 style='text-align: center;'>R$ {st.session_state['saldo_anterior_master']:,.2f}</h4>", unsafe_allow_html=True)
             
-    met_2.metric(label="🟢 Total de Entradas", value=f"R$ {total_entradas_global:,.2f}")
-    met_3.metric(label="🔴 Total de Saídas", value=f"R$ {total_saidas_global:,.2f}")
-    met_4.metric(label="📊 Saldo (Gestão Atual)", value=f"R$ {saldo_gestao_atual:,.2f}")
-    met_5.metric(label="💰 Saldo (Total)", value=f"R$ {saldo_total_global:,.2f}")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 2. Meio: Total de Entradas e Total de Saídas (Lado a lado embaixo do Saldo Anterior)
+    col_meio_1, col_meio_2 = st.columns(2)
+    col_meio_1.metric(label="🟢 Total de Entradas", value=f"R$ {total_entradas_global:,.2f}")
+    col_meio_2.metric(label="🔴 Total de Saídas", value=f"R$ {total_saidas_global:,.2f}")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 3. Base: Os dois ícones de Saldo (Lado a lado no final do bloco de métricas)
+    col_base_1, col_base_2 = st.columns(2)
+    col_base_1.metric(label="📊 Saldo (Gestão Atual)", value=f"R$ {saldo_gestao_atual:,.2f}")
+    col_base_2.metric(label="💰 Saldo (Total)", value=f"R$ {saldo_total_global:,.2f}")
     
     st.markdown("---")
     
@@ -182,16 +192,3 @@ elif st.session_state["tela_atual"] == "caixa":
                 
                 if bt_inserir_extra and (e_ex > 0 or s_ex > 0):
                     nova_linha_diaria = pd.DataFrame([{"Dia": d_ex, "Entradas": e_ex, "Saídas": s_ex, "Motivo": m_ex}])
-                    st.session_state["dados_meses_financeiros"][mes_selecionado] = pd.concat([st.session_state["dados_meses_financeiros"][mes_selecionado], nova_linha_diaria], ignore_index=True)
-                    st.success("Registro adicionado com sucesso!")
-                    st.rerun()
-    else:
-        st.dataframe(df_mes_ativo, use_container_width=True, hide_index=True)
-
-    # --- FECHAMENTO E TOTAIS DE SOMA DO MÊS SELECIONADO ---
-    st.markdown("---")
-    m_entradas = pd.to_numeric(df_mes_ativo["Entradas"], errors='coerce').sum()
-    m_saidas = pd.to_numeric(df_mes_ativo["Saídas"], errors='coerce').sum()
-    m_saldo = m_entradas - m_saidas
-
-    col_t1, col_t2, col_t3 = st.columns(3)
