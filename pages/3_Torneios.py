@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime
 import random
+from PIL import Image, ImageDraw
+import io
 
 # Configuração da página
 st.set_page_config(page_title="Torneios - Painel ARO", page_icon="🦅", layout="wide")
@@ -150,49 +152,82 @@ for i, esp in enumerate(especies_validas):
                 use_container_width=True
             )
 
-# --- 5. CENTRAL DE EXCLUSÃO MANUAL PARA CELULAR (EXCLUSIVO MASTER) ---
+# --- 5. FUNÇÃO PARA GERAR A IMAGEM DA TABELA SIMPLES DE INFORMAÇÕES ---
+def criar_imagem_tabela(data_t, mapa_contagem, total_g):
+    W, H = 600, 520
+    img = Image.new("RGB", (W, H), "#111625")
+    draw = ImageDraw.Draw(img)
+    
+    # Moldura dourada minimalista
+    draw.rectangle([20, 20, W-20, H-20], outline="#D4AF37", width=2)
+    
+    # Textos do Cabeçalho
+    draw.text((W/2, 50), "ARO - RIO DO SUL", fill="#D4AF37", anchor="mm", font_size=26)
+    draw.text((W/2, 90), f"TORNEIO DIA: {data_t}", fill="#FFFFFF", anchor="mm", font_size=20)
+    
+    # Cabeçalho da Tabela
+    draw.line([40, 130, W-40, 130], fill="#D4AF37", width=2)
+    draw.text((50, 145), "ESPÉCIE", fill="#D4AF37", font_size=16)
+    draw.text((W-50, 145), "QUANTIDADE", fill="#D4AF37", anchor="ra", font_size=16)
+    draw.line([40, 175, W-40, 175], fill="#D4AF37", width=1)
+    
+    # Linhas da tabela
+    y_pos = 190
+    for esp, qtd in mapa_contagem.items():
+        draw.text((50, y_pos), esp.upper(), fill="#FFFFFF", font_size=16)
+        draw.text((W-50, y_pos), str(qtd), fill="#FFFFFF", anchor="ra", font_size=16)
+        draw.line([40, y_pos+25, W-40, y_pos+25], fill="#2D3748", width=1)
+        y_pos += 40
+        
+    # Rodapé da Tabela com Total Acumulado
+    draw.line([40, y_pos, W-40, y_pos], fill="#D4AF37", width=2)
+    draw.text((50, y_pos+15), "TOTAL GERAL DE GAIOLAS", fill="#D4AF37", font_size=18)
+    draw.text((W-50, y_pos+15), str(total_g), fill="#D4AF37", anchor="ra", font_size=18)
+    
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+# --- 6. CENTRAL DE EXPORTAÇÃO E EXCLUSÃO MANUAL PARA CELULAR (EXCLUSIVO MASTER) ---
 if is_master and not df_inscritos.empty:
+    st.write("---")
+    st.markdown("### 📊 Exportação e Compartilhamento")
+    
+    data_str = st.session_state["data_torneio_aro"].strftime('%d/%m/%Y')
+    img_bytes = criar_imagem_tabela(data_str, contagem, total_geral_inscritos)
+    
+    st.image(img_bytes, width=400, caption="Informativo Oficial de Inscrições")
+    
+    st.download_button(
+        label="📥 Baixar Cartaz para WhatsApp (Imagem PNG)",
+        data=img_bytes,
+        file_name=f"aro_tabela_inscritos_{st.session_state['data_torneio_aro'].strftime('%Y_%m_%d')}.png",
+        mime="image/png",
+        use_container_width=True
+    )
+    
     st.write("---")
     st.markdown("### 🗑️ Cancelar Inscrição (Remover Ave)")
     st.caption("Desenvolvido para exclusão rápida via celular sem depender de teclado físico.")
     
-    # Criar uma lista textual compreensível para o menu de exclusão
     opcoes_exclusao = []
     for idx, row in df_inscritos.iterrows():
         opcoes_exclusao.append(f"[{row['Espécie']}] Estaca {row['Estaca']} - {row['Nome da Ave']} (Criador: {row['Proprietário']})")
     
     ave_selecionada_txt = st.selectbox("Selecione a ave que deseja remover:", opcoes_exclusao, key="combo_deletar_ave")
-    
-    # Caixa de checagem para confirmação de segurança (Evita cliques errados na tela do celular)
     confirmar_check = st.checkbox("⚠️ Marque aqui para confirmar que deseja excluir esta ave", key="check_seguranca_ave")
     
     if st.button("❌ Deletar Ave Selecionada", type="secondary", use_container_width=True):
         if confirmar_check:
-            # Encontra o índice correspondente no DataFrame global baseado na seleção do selectbox
             posicao_lista = opcoes_exclusao.index(ave_selecionada_txt)
             indice_original = df_inscritos.index[posicao_lista]
             
-            # Deleta a linha do banco e atualiza a sessão
             st.session_state["torneio_inscricoes_aro"] = df_inscritos.drop(indice_original).reset_index(drop=True)
             st.success("A ave foi removida do torneio com sucesso!")
             st.rerun()
         else:
             st.error("Por favor, marque a caixa de confirmação de segurança antes de clicar em deletar.")
 
-# --- 6. RECURSO DE ZERAR TORNEIO COMPLETO (EXCLUSIVO MASTER) ---
+# --- 7. RECURSO DE ZERAR TORNEIO COMPLETO (EXCLUSIVO MASTER) ---
 if is_master:
     st.write("---")
-    st.markdown("### ⚠️ Zona de Perigo Administrativa")
-    
-    # Confirmação dupla para resetar o torneio
-    confirmar_reset_geral = st.checkbox("💥 Marque aqui para CONFIRMAR a exclusão de TODOS os inscritos deste torneio", key="check_reset_geral")
-    
-    if st.button("🗑️ ZERAR TORNEIO COMPLETO", type="primary", use_container_width=True):
-        if confirmar_reset_geral:
-            st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(
-                columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"]
-            )
-            st.warning("O torneio foi resetado! Todas as inscrições foram apagadas com sucesso.")
-            st.rerun()
-        else:
-            st.error("Por favor, marque a caixa de confirmação para autorizar o reset completo do torneio.")
