@@ -2,22 +2,22 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
-# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
-st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
-
-# FORÇAR A LOGO ANDROID/IPHONE
-st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"><meta name="apple-mobile-web-app-title" content="ARO"><meta name="application-name" content="ARO"></head>""", unsafe_allow_html=True)
+# CONFIGURAÇÃO OFICIAL DO APP E ÍCONE DO NAVEGADOR
+st.set_page_config(
+    page_title="ARO", 
+    page_icon="logo.png" if os.path.exists("logo.png") else "📊", 
+    layout="wide"
+)
 
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
-# --- TELA DE LOGIN PROTEGIDA (BLINDADA CONTRA QUEDAS DE IMAGEM) ---
+# --- TELA DE LOGIN PROTEGIDA ---
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    
     try:
         if os.path.exists("logo.png"):
-            col_l1, col_l2, col_l3 = st.columns(3)
+            _, col_l2, _ = st.columns(3)
             col_l2.image("logo.png", use_container_width=True)
         else:
             st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
@@ -129,8 +129,7 @@ elif st.session_state["tela_atual"] == "caixa":
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
                     pickle.dump(st.session_state["dados_meses_financeiros"], open("backup_financas.pkl", "wb"))
                     st.toast("💾 Salvo!"); st.rerun()
-    else:
-        st.dataframe(df_m_at, use_container_width=True, hide_index=True)
+    else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
     st.markdown("---")
     m_e = pd.to_numeric(df_m_at["Entradas"], errors='coerce').sum()
     m_s = pd.to_numeric(df_m_at["Saídas"], errors='coerce').sum()
