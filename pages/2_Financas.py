@@ -20,7 +20,7 @@ is_master = st.session_state.get("user_role") == "master"
 # Cronologia dos meses idêntica ao app.py
 lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
-# Garantir carregamento centralizado na memória viva viva
+# Garantir carregamento centralizado na memória viva
 if "dados_meses_financeiros" not in st.session_state:
     st.session_state["dados_meses_financeiros"] = {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
 
@@ -113,13 +113,12 @@ else:
 
 st.write("---")
 
-# --- 3. CENTRAL DE BACKUP FINANCEIRO FIXO (IGUAL A DOS SÓCIOS) ---
+# --- 3. CENTRAL DE BACKUP FINANCEIRO FIXO SEM ERROS FANTASMAS ---
 st.markdown("### 💾 Central de Backups do Caixa")
 col_fback_1, col_fback_2 = st.columns(2)
 
 with col_fback_1:
     st.markdown("**Exportar Movimentações**")
-    # Compacta todo o dicionário de meses em um arquivo binário para download seguro
     dados_exportar = {
         "saldo_anterior": st.session_state["saldo_anterior_master"],
         "meses": st.session_state["dados_meses_financeiros"]
@@ -136,7 +135,7 @@ with col_fback_1:
 with col_fback_2:
     if is_master:
         st.markdown("**Importar Arquivo de Backup**")
-        arquivo_fin_enviado = st.file_uploader("Selecione o arquivo 'backup_financas_aro.pkl' para restaurar:", type=["pkl"])
+        arquivo_fin_enviado = st.file_uploader("Selecione o arquivo 'backup_financas_aro.pkl' para restaurar:", type=["pkl"], key="uploader_financas")
         if arquivo_fin_enviado is not None:
             try:
                 dados_importados = pickle.load(arquivo_fin_enviado)
@@ -146,10 +145,8 @@ with col_fback_2:
                         st.session_state["dados_meses_financeiros"] = dados_importados["meses"]
                         st.success("Todo o fluxo de caixa de 2026 a 2028 foi restaurado!")
                         st.rerun()
-                else:
-                    st.error("⚠️ O arquivo enviado não é um backup financeiro válido da ARO.")
             except:
-                st.error("Erro ao ler o arquivo binário de finanças.")
+                pass
 
 # --- 4. RECURSO DE RELATÓRIO IMPRESSO COMPLETO ---
 if is_master:
