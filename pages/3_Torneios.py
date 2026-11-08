@@ -2,6 +2,13 @@ import streamlit as st
 import pandas as pd
 import datetime, random, io, pickle, os
 
+# Importações para a geração correta do PDF de fichas agrupadas em folha A4
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+
 st.set_page_config(page_title="Torneios - ARO", page_icon="🦅", layout="wide")
 
 if not st.session_state.get("autenticado", False):
@@ -10,7 +17,6 @@ if not st.session_state.get("autenticado", False):
 
 st.title("🦅 Gestão de Torneios - ARO Rio do Sul")
 
-# --- IDENTIFICAÇÃO SEGURA DE PERMISSÕES ---
 role_atual = str(st.session_state.get("user_role", "")).strip().lower()
 usuario_logado = str(st.session_state.get("username", "")).strip().lower()
 is_admin = role_atual in ["master", "diretoria", "admin"] or usuario_logado in ["master", "admin"]
@@ -18,11 +24,9 @@ is_admin = role_atual in ["master", "diretoria", "admin"] or usuario_logado in [
 usuarios_dinamicos = st.session_state.get("banco_usuarios_dinamicos", {})
 socio_vinculado = "Administração" if is_admin else usuarios_dinamicos.get(st.session_state.get("username"), {}).get("socio_vinculado", st.session_state.get("username"))
 
-# --- DEFINIÇÃO DOS ARQUIVOS FÍSICOS DE BACKUP ---
 ARQUIVO_CONFIRMADOS = "inscricoes_confirmadas.pkl"
 ARQUIVO_PENDENTES = "inscricoes_pendentes.pkl"
 
-# --- FUNÇÕES PARA CARREGAR E SALVAR DADOS NO DISCO ---
 def carregar_dados_fisicos():
     if os.path.exists(ARQUIVO_CONFIRMADOS):
         with open(ARQUIVO_CONFIRMADOS, "rb") as f:
@@ -42,7 +46,6 @@ def salvar_dados_fisicos():
     with open(ARQUIVO_PENDENTES, "wb") as f:
         pickle.dump(st.session_state["inscricoes_pendentes_aro"], f)
 
-# Carrega os dados reais do arquivo físico na inicialização da página
 carregar_dados_fisicos()
 
 if "data_torneio_aro" not in st.session_state:
@@ -58,7 +61,6 @@ if is_admin:
 else:
     st.markdown(f"### 📅 Torneio Dia: {st.session_state['data_torneio_aro'].strftime('%d/%m/%Y')}")
 
-# Captura tabelas do arquivo físico em tempo de execução
 df_inscritos_atual = st.session_state["dados_torneios_internos"]
 df_pendentes_atual = st.session_state["inscricoes_pendentes_aro"]
 
@@ -69,7 +71,6 @@ for i, esp in enumerate(especies_validas):
     cols[i].metric(label=esp, value=str(contagem[esp]))
 st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
-# --- FILA DE APROVAÇÃO (EXCLUSIVO ADMIN / MASTER / DIRETORIA) ---
 if is_admin:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
@@ -78,7 +79,7 @@ if is_admin:
     else:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
-                c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
+                c_inf, c_b1, c_b2 = st.columns()
                 c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
                 
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
@@ -105,7 +106,6 @@ if is_admin:
                     st.warning("Inscrição recusada!")
                     st.rerun()
 
-# --- SEÇÃO: MINHAS INSCRIÇÕES (ACOMPANHAMENTO DO SÓCIO) ---
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
 lista_status = []
@@ -125,7 +125,6 @@ if len(lista_status) == 0:
 else:
     st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
-# --- FORMULÁRIO DE INSCRIÇÃO ---
 st.write("---")
 st.markdown("### 📝 Solicitar Inscrição de Ave")
 df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
@@ -157,7 +156,6 @@ else:
             st.success("🎯 Solicitado com sucesso! Verifique a tabela acima.")
             st.rerun()
 
-# --- VISUALIZAÇÃO GERAL DE CONFIRMADOS (ABAS) ---
 st.write("---")
 st.markdown("### 🏆 Competidores Confirmados por Categoria")
 abas = st.tabs(especies_validas)
@@ -169,19 +167,23 @@ for i, esp in enumerate(especies_validas):
         else: 
             st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
-# --- CONFIGURAÇÕES ADMINISTRATIVAS E EXCLUSÃO (EXCLUSIVO MASTER) ---
-if role_atual == "master":
-    st.write("---")
-    st.markdown("### 🗑️ Cancelamento Manual de Inscrição")
-    if not df_inscritos_atual.empty:
-        opc = [f"[{r['Espécie']}] Estaca {r['Estaca']} - {r['Nome da Ave']} ({r['Proprietário']})" for _, r in df_inscritos_atual.iterrows()]
-        sel = st.selectbox("Escolha a ave registrada para remover:", opc)
-        if st.checkbox("Li e aceito excluir permanentemente esta vaga"):
-            if st.button("❌ Remover do Torneio", use_container_width=True):
-                idx_del = opc.index(sel)
-                st.session_state["dados_torneios_internos"] = df_inscritos_atual.drop(df_inscritos_atual.index[idx_del]).reset_index(drop=True)
-                salvar_dados_fisicos()
-                st.success("Registro apagado!")
-                st.rerun()
-    else:
-        st.caption("Nenhum competidor confirmado para exclusão.")
+def gerar_pdf_fichas_a4(df_inscritos, data_torneio):
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1*cm, rightMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm)
+    styles = getSampleStyleSheet()
+    style_tit = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=10, leading=11, alignment=1)
+    style_txt = ParagraphStyle('X', fontName='Helvetica', fontSize=8, leading=10)
+    style_bold = ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=8, leading=10)
+    
+    elementos = []
+    data_str = data_torneio.strftime('%d/%m/%Y')
+    lista_tabelas = []
+    
+    for _, r in df_inscritos.iterrows():
+        val = "R$ 25,00" if str(r.get("Clube", "")).upper() == "ARO" else "R$ 35,00"
+        est = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
+        
+        dados_ficha = [
+            [Paragraph("**ARO - Rio do Sul**", style_tit), ""],
+            [Paragraph(f"**Data:** {data_str}", style_txt), Paragraph(f"**Estaca:** {est}", style_bold)],
+            [Paragraph(f"**Proprietário:** {r['Proprietário']}", style_txt), ""],
