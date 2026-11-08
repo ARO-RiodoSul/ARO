@@ -65,13 +65,13 @@ if not df_inscritos.empty:
     for esp in especies_validas:
         contagem[esp] = len(df_inscritos[df_inscritos["Espécie"] == esp])
 
-# Exibir os contadores mostrando apenas o número puro (sem a palavra 'inscrito')
+# Exibir os contadores mostrando apenas o número puro
 cols_contador = st.columns(6)
 for i, esp in enumerate(especies_validas):
     with cols_contador[i]:
         st.metric(label=icones_especies[esp], value=str(contagem[esp]))
 
-# Adição do Totalizador Geral embaixo da lista de espécies
+# Totalizador Geral embaixo da lista de espécies
 st.write("")
 st.info(f"✨ **TOTAL DE AVES INSCRITAS NO TORNEIO:** {total_geral_inscritos} aves cadastradas.")
 st.write("---")
@@ -109,7 +109,7 @@ if is_master:
                     if estacas_ocupadas:
                         estaca_sorteada = max(estacas_ocupadas) + 1
                     else:
-                        estaca_sorteada = limite_inicial + 1
+                        staca_sorteada = limite_inicial + 1
                 
                 nova_inscricao = pd.DataFrame([{
                     "Proprietário": proprietario.strip(),
@@ -138,14 +138,55 @@ for i, esp in enumerate(especies_validas):
         else:
             df_ordenado = df_filtrado.sort_values(by="Estaca").reset_index(drop=True)
             
-            st.dataframe(
-                df_ordenado[["Estaca", "Nome da Ave", "Proprietário", "Anilha"]],
-                hide_index=True,
-                column_config={
-                    "Estaca": st.column_config.NumberColumn("Estaca / Gaiola", format="%d"),
-                    "Nome da Ave": "Nome do Pássaro",
-                    "Proprietário": "Proprietário / Criador",
-                    "Anilha": "Nº da Anilha"
-                },
-                use_container_width=True
+            if is_master:
+                # Se for Master, exibe o data_editor para permitir a exclusão individual por linha
+                st.caption("🗑️ Para deletar uma ave específica, clique no quadrado ao lado esquerdo da linha dela para selecioná-la e pressione 'Delete' no seu teclado.")
+                df_editado_lista = st.data_editor(
+                    df_ordenado[["Estaca", "Nome da Ave", "Proprietário", "Anilha"]],
+                    hide_index=True,
+                    num_rows="dynamic", # Libera a remoção nativa de linhas pelo Streamlit
+                    column_config={
+                        "Estaca": st.column_config.NumberColumn("Estaca", disabled=True, format="%d"),
+                        "Nome da Ave": st.column_config.TextColumn("Nome do Pássaro", disabled=True),
+                        "Proprietário": st.column_config.TextColumn("Proprietário / Criador", disabled=True),
+                        "Anilha": st.column_config.TextColumn("Nº da Anilha", disabled=True)
+                    },
+                    use_container_width=True,
+                    key=f"aba_editor_{esp}"
+                )
+                
+                # Se o número de linhas diminuiu, significa que você deletou uma ave
+                if len(df_editado_lista) != len(df_ordenado):
+                    # Filtra o banco global removendo o item que sumiu da aba atual
+                    anilhas_restantes = df_editado_lista["Anilha"].tolist()
+                    df_global_atualizado = df_inscritos[~((df_inscritos["Espécie"] == esp) & (~df_inscritos["Anilha"].isin(anilhas_restantes)))]
+                    st.session_state["torneio_inscricoes_aro"] = df_global_atualizado
+                    st.rerun()
+            else:
+                # Visualização estática simples para os usuários comuns
+                st.dataframe(
+                    df_ordenado[["Estaca", "Nome da Ave", "Proprietário", "Anilha"]],
+                    hide_index=True,
+                    column_config={
+                        "Estaca": st.column_config.NumberColumn("Estaca / Gaiola", format="%d"),
+                        "Nome da Ave": "Nome do Pássaro",
+                        "Proprietário": "Proprietário / Criador",
+                        "Anilha": "Nº da Anilha"
+                    },
+                    use_container_width=True
+                )
+
+# --- 5. RECURSO DE ZERAR TORNEIO COMPLETO (EXCLUSIVO MASTER) ---
+if is_master:
+    st.write("---")
+    st.markdown("### ⚠️ Zona de Perigo Administrativa")
+    
+    col_vazia, col_botao_reset = st.columns([3, 1])
+    with col_botao_reset:
+        if st.button("🗑️ ZERAR TORNEIO COMPLETO", type="primary", use_container_width=True):
+            # Limpa o DataFrame deixando ele totalmente zerado para o próximo evento
+            st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(
+                columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"]
             )
+            st.warning("O torneio foi resetado! Todas as inscrições foram apagadas com sucesso.")
+            st.rerun()
