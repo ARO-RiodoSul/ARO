@@ -20,9 +20,8 @@ st.title("🦅 Plantel de Aves - ARO Rio do Sul")
 role_atual = st.session_state.get("user_role")
 usuario_logado = st.session_state.get("username")
 
-# RESOLUÇÃO DO CAMINHO ABSOLUTO SEGURO CONTRA ERROS DE GRAVAÇÃO
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PATH_AVES = os.path.join(BASE_DIR, "backup_aves.pkl")
+# CORREÇÃO DO CAMINHO ABSOLUTO: Salva de forma direta na raiz compartilhada do app.py
+PATH_AVES = os.path.abspath(os.path.join(".", "backup_aves.pkl"))
 
 if role_atual in ["master", "diretoria"]:
     socio_vinculado = "Administração"
@@ -30,7 +29,7 @@ else:
     usuarios_dinamicos = st.session_state.get("banco_usuarios_dinamicos", {})
     socio_vinculado = usuarios_dinamicos.get(usuario_logado, {}).get("socio_vinculado", usuario_logado)
 
-# Inicialização segura do banco de aves usando o caminho absoluto correto
+# Inicialização segura do banco de aves
 if "dados_aves_sistema" not in st.session_state:
     df_inicial = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha"])
     if os.path.exists(PATH_AVES):
@@ -70,7 +69,7 @@ with st.form("form_cadastro_ave", clear_on_submit=True):
                 nova_ave = pd.DataFrame([{"Proprietário": proprietario_final, "Nome da Ave": nome_passaro.strip(), "Espécie": especie_selecionada, "Anilha": anilha_passaro.strip()}])
                 st.session_state["dados_aves_sistema"] = pd.concat([df_aves, nova_ave], ignore_index=True)
                 try:
-                    # CORREÇÃO DEFINITIVA: Força a gravação usando o PATH_AVES absoluto mapeado acima
+                    # Gravação forçada no caminho compartilhado absoluto
                     with open(PATH_AVES, "wb") as f:
                         pickle.dump(st.session_state["dados_aves_sistema"], f)
                     st.success("Ave cadastrada com sucesso!")
