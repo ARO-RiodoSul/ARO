@@ -1,65 +1,69 @@
 import streamlit as st
 import pandas as pd
-import io
+import io, os
 
-# CONFIGURAÇÃO DA PÁGINA (Sempre o primeiro comando)
 st.set_page_config(page_title="Sócios - Painel ARO", page_icon="👥", layout="wide")
 
-# --- TRAVA DE SEGURANÇA POR CATEGORIA DE USUÁRIO ---
 if st.session_state.get("user_role") not in ["master", "diretoria"]:
     st.error("🔒 Acesso Restrito! Esta página é exclusiva para membros do nível Master ou Diretoria.")
     st.stop()
 
-# Título do Módulo
 st.title("👥 Cadastro de Sócios - ARO Rio do Sul")
 is_master = st.session_state.get("user_role") == "master"
 
-# CARREGAMENTO INTELIGENTE INTEGRADO NA MEMÓRIA VIVA
+# Nome estável do arquivo físico no servidor
+ARQUIVO_SOCIOS_FISICO = "backup_socios.csv"
+
+def carregar_socios_disco():
+    if os.path.exists(ARQUIVO_SOCIOS_FISICO):
+        try:
+            df = pd.read_csv(ARQUIVO_SOCIOS_FISICO)
+            st.session_state["dados_socios_internos"] = df
+        except:
+            st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
+    else:
+        st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
+
+def salvar_socios_disco():
+    df_para_salvar = st.session_state["dados_socios_internos"]
+    df_para_salvar.to_csv(ARQUIVO_SOCIOS_FISICO, index=False)
+
+# Garante o carregamento do arquivo físico antes de montar a tela
 if "dados_socios_internos" not in st.session_state:
-    st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
+    carregar_socios_disco()
 
 df_socios = st.session_state["dados_socios_internos"]
 
 if not df_socios.empty:
     df_socios["Número"] = pd.to_numeric(df_socios["Número"], errors='coerce').fillna(1).astype(int)
 
-# --- 1. FORMULÁRIO DE CADASTRO LIMPO E SEQUENCIAL (EXCLUSIVO MASTER) ---
 if is_master:
     st.markdown("### 📝 Registrar Novo Membro")
     with st.form("form_novo_socio", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
         col_f4, col_f5, col_f6 = st.columns(3)
         
-        with col_f1: id_aro = st.text_input("ID ARO:")
-        with col_f2: nome_socio = st.text_input("Nome Completo:")
-        with col_f3: tel_socio = st.text_input("Telefone / Contato:")
-        with col_f4: cpf_socio = st.text_input("CPF:")
-        with col_f5: ctf_socio = st.text_input("CTF IBAMA:")
-        with col_f6: status_socio = st.selectbox("Status Inicial:", ["Ativo", "Inativo", "Pendente"])
+        id_aro = col_f1.text_input("ID ARO:")
+        nome_socio = col_f2.text_input("Nome Completo:")
+        tel_socio = col_f3.text_input("Telefone / Contato:")
+        cpf_socio = col_f4.text_input("CPF:")
+        ctf_socio = col_f5.text_input("CTF IBAMA:")
+        status_socio = col_f6.selectbox("Status Inicial:", ["Ativo", "Inativo", "Pendente"])
         
         if st.form_submit_button("➕ Cadastrar Novo Sócio", use_container_width=True):
             if nome_socio.strip():
                 proximo_no = int(df_socios["Número"].max() + 1) if not df_socios.empty else 1
-                
                 novo_registro = pd.DataFrame([{
-                    "Número": int(proximo_no),
-                    "ID": id_aro.strip(),
-                    "Nome": nome_socio.strip(),
-                    "Telefone": tel_socio.strip(),
-                    "CPF": cpf_socio.strip(),
-                    "CTF": ctf_socio.strip(),
-                    "Status": status_socio
+                    "Número": int(proximo_no), "ID": id_aro.strip(), "Nome": nome_socio.strip(),
+                    "Telefone": tel_socio.strip(), "CPF": cpf_socio.strip(), "CTF": ctf_socio.strip(), "Status": status_socio
                 }])
-                
                 st.session_state["dados_socios_internos"] = pd.concat([df_socios, novo_registro], ignore_index=True)
+                salvar_socios_disco()  # Força gravação física instantânea
                 st.success(f"Sucesso! Sócio '{nome_socio.strip()}' cadastrado com o Nº {proximo_no}!")
                 st.rerun()
             else:
-                st.error("Por favor, preencha ao menos o campo 'Nome Completo' para efetuar o cadastro!")
-
+                st.error("Por favor, preencha ao menos o campo 'Nome Completo'!")
 st.write("---")
-
-# --- 2. EXIBIÇÃO DA PLANILHA DE CONSULTA ---
 st.markdown("### 📊 Listagem de Sócios Cadastrados")
 
 if df_socios.empty:
@@ -77,8 +81,6 @@ else:
     )
 
 st.write("---")
-
-# --- 3. CENTRAL DE BACKUP COMPATÍVEL ---
 st.markdown("### 💾 Central de Backups e Restauração")
 col_back_1, col_back_2 = st.columns(2)
 
@@ -97,9 +99,8 @@ with col_back_1:
 with col_back_2:
     if is_master:
         st.markdown("**Importar Arquivo de Backup**")
-        arquivo_enviado = st.file_uploader("Selecione o arquivo 'backup_socios_aro.csv' salvo para restaurar o sistema:", type=["csv"], key="uploader_socios")
+        arquivo_enviado = st.file_uploader("Selecione o arquivo 'backup_socios_aro.csv' salvo:", type=["csv"], key="uploader_socios")
         if arquivo_enviado is not None:
-            # CORREÇÃO CHAVE: Executa a validação e o botão de forma amarrada num bloco try único para evitar eco de erros
             try:
                 df_importado = pd.read_csv(arquivo_enviado)
                 colunas_obrigatorias = ["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"]
@@ -107,14 +108,14 @@ with col_back_2:
                 if all(col in df_importado.columns for col in colunas_obrigatorias):
                     if st.button("🔄 Confirmar Restauração do Banco de Dados", use_container_width=True, type="primary"):
                         st.session_state["dados_socios_internos"] = df_importado
-                        st.success("Banco de dados de sócios restaurado com sucesso!")
+                        salvar_socios_disco()  # Salva o arquivo importado fisicamente no disco do servidor
+                        st.success("Banco de dados de sócios restaurado e sincronizado com o servidor!")
                         st.rerun()
                 else:
                     st.error("⚠️ O arquivo enviado não possui as colunas oficiais do sistema da ARO.")
             except:
-                pass
+                st.error("Erro ao ler o arquivo CSV.")
 
-# --- 4. EXCLUSÃO RÁPIDA NO CELULAR (EXCLUSIVO MASTER) ---
 if is_master and not df_socios.empty:
     st.write("---")
     st.markdown("### 🗑️ Remover Membro do Sistema")
@@ -130,6 +131,7 @@ if is_master and not df_socios.empty:
             if not st.session_state["dados_socios_internos"].empty:
                 st.session_state["dados_socios_internos"]["Número"] = list(range(1, len(st.session_state["dados_socios_internos"]) + 1))
                 
+            salvar_socios_disco()  # Atualiza o arquivo físico após a remoção
             st.success("Membro excluído do sistema com sucesso!")
             st.rerun()
         else:
