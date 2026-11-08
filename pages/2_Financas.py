@@ -97,7 +97,7 @@ total_entradas_mes = pd.to_numeric(df_atual["Entradas"], errors='coerce').fillna
 total_saidas_mes = pd.to_numeric(df_atual["Saídas"], errors='coerce').fillna(0).sum() if not df_atual.empty else 0.0
 saldo_mes = total_entradas_mes - total_saidas_mes
 
-# CORREÇÃO DAQUI: Desempacotando as colunas de totais mensais corretamente
+# Desempacotando as colunas de totais mensais corretamente
 col_mes_1, col_mes_2, col_mes_3 = st.columns(3)
 with col_mes_1:
     st.metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
@@ -143,3 +143,40 @@ else:
             "Motivo": "Motivo/Descrição"
         }
     )
+
+# --- 3. RECURSO DE RELATÓRIO IMPRESSO COMPLETO (Exclusivo Master) ---
+if is_master:
+    st.write("---")
+    st.markdown("### 🖨️ Relatórios do Sistema")
+    
+    if st.button("Gerar Relatório de Impressão Completo", use_container_width=True):
+        st.success("Relatório gerado com sucesso logo abaixo! Pressione Ctrl+P no seu teclado para imprimir ou salvar em PDF.")
+        st.write("---")
+        
+        # Cabeçalho Geral Imprimível
+        st.markdown("<h2 style='text-align: center;'>🦅 RELATÓRIO FINANCEIRO INTEGRADO - ARO RIO DO SUL</h2>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center;'><b>Data de Emissão:</b> {datetime.date.today().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
+        st.write(f"**Saldo Anterior Geral:** R$ {saldo_anterior:,.2f}")
+        st.write(f"**Total Acumulado de Entradas:** R$ {total_entradas_geral:,.2f}")
+        st.write(f"**Total Acumulado de Saídas:** R$ {total_saidas_geral:,.2f}")
+        st.write(f"**Saldo Total de Caixa:** R$ {saldo_total:,.2f}")
+        st.write("---")
+        
+        # Listar mês a mês com quebra de página HTML para a impressora
+        for m in lista_meses:
+            df_m = st.session_state["financas_data"]["meses"][m]
+            
+            st.markdown(f"### 📅 Período: {m}")
+            if df_m is not None and not df_m.empty:
+                # Formatação visual limpa para as tabelas impressas
+                df_impressao = df_m.copy()
+                df_impressao["Dia"] = df_impressao["Dia"].astype(int)
+                df_impressao["Entradas (R$)"] = df_impressao["Entradas"].map(lambda x: f"R$ {float(x):,.2f}" if pd.notna(x) and x != "" else "R$ 0,00")
+                df_impressao["Saídas (R$)"] = df_impressao["Saídas"].map(lambda x: f"R$ {float(x):,.2f}" if pd.notna(x) and x != "" else "R$ 0,00")
+                
+                st.table(df_impressao[["Dia", "Entradas (R$)", "Saídas (R$)", "Motivo"]].rename(columns={"Motivo": "Motivo/Descrição"}))
+            else:
+                st.caption("Nenhum lançamento efetuado neste mês.")
+            
+            # Comando invisível que avisa o navegador para pular para a próxima página na impressão física
+            st.markdown("<div style='page-break-after: always;'></div>", unsafe_allow_html=True)
