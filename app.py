@@ -1,85 +1,76 @@
 import streamlit as st
 import pandas as pd
-import datetime
+import os, pickle
 
-# 1. Configuração Inicial da Página Principal
-st.set_page_config(page_title="Painel ARO - Rio do Sul", page_icon="🦅", layout="wide")
+# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
+st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
 
-# Inicialização segura do Estado do Usuário
-if "username" not in st.session_state:
-    st.session_state["username"] = None
-if "user_role" not in st.session_state:
-    st.session_state["user_role"] = None
+# TRAVA PARA FORÇAR A LOGO E NOME NO CELULAR
+st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
-# --- FUNÇÃO DO RELATÓRIO FINANCEIRO (Totalmente blindada contra erros) ---
-def gerar_relatorio_texto():
-    txt = "=== RELATÓRIO FINANCEIRO GERAL - ARO ===\n\n"
-    if "financas_data" in st.session_state and "meses" in st.session_state["financas_data"]:
-        for mes, df_at in st.session_state["financas_data"]["meses"].items():
-            if df_at is not None and isinstance(df_at, pd.DataFrame) and not df_at.empty:
-                txt += f"\n--- Mês: {mes} ---\n"
-                for _, r in df_at.iterrows():
-                    try:
-                        dia_val = r.get('Dia')
-                        motivo_val = r.get('Motivo')
-                        if pd.isna(dia_val) or str(dia_val).strip() == "" or pd.isna(motivo_val) or str(motivo_val).strip() == "":
-                            continue
-                        dia_int = int(float(dia_val))
-                        ent = float(r.get('Entradas', 0.0)) if pd.notna(r.get('Entradas')) else 0.0
-                        sai = float(r.get('Saídas', 0.0)) if pd.notna(r.get('Saídas')) else 0.0
-                        txt += f"Dia {dia_int:02d} | Entrada: R$ {ent:.2f} | Saída: R$ {sai:.2f} | Motivo: {motivo_val}\n"
-                    except:
-                        continue
-    return txt
+# --- SISTEMA DE LOGIN SEGURO ---
+if "autenticado" not in st.session_state:
+    st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
-# --- 2. SISTEMA DE LOGIN E CONTROLE DE ACESSO ---
-st.title("🦅 Sistema de Gestão - ARO Rio do Sul")
-
-if st.session_state["username"] is None:
-    st.subheader("🔑 Área de Acesso")
+if not st.session_state["autenticado"]:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"):
+        _, col_img, _ = st.columns(3)
+        col_img.image("logo.png", use_container_width=True)
+    else:
+        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
     
-    # Campo de login simples para identificação
-    usuario_input = st.text_input("Digite seu Nome de Usuário / Identificação:")
-    
-    if st.button("Entrar no Painel", use_container_width=True):
-        if usuario_input.strip() == "Junior Rebelo":
-            st.session_state["username"] = "Junior Rebelo"
-            st.session_state["user_role"] = "master"
-            st.success("Bem-vindo de volta, Junior! Acesso Master concedido.")
-            st.rerun()
-        elif usuario_input.strip() != "":
-            st.session_state["username"] = usuario_input.strip()
-            st.session_state["user_role"] = "leitura"
-            st.info(f"Acesso concedido como {usuario_input.strip()} (Modo Leitura).")
-            st.rerun()
-        else:
-            st.warning("Por favor, digite um nome de usuário válido.")
+    with st.form("t_login"):
+        u = st.text_input("Usuário")
+        s = st.text_input("Senha", type="password")
+        if st.form_submit_button("Entrar"):
+            if u == "Junior Rebelo" and s == "270688":
+                st.session_state.update({"autenticado": True, "user_role": "master"})
+                st.rerun()
+            elif u == "Kleven" and s == "12345678":
+                st.session_state.update({"autenticado": True, "user_role": "leitor"})
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos.")
+    st.stop()
 
-else:
-    # --- 3. PAINEL PRINCIPAL APÓS LOGIN ---
-    st.sidebar.markdown(f"👤 **Usuário:** {st.session_state['username']}")
-    st.sidebar.markdown(f"🛡️ **Nível:** {st.session_state['user_role'].upper()}")
-    
-    if st.sidebar.button("🚪 Sair do Sistema"):
-        st.session_state["username"] = None
-        st.session_state["user_role"] = None
-        st.rerun()
+# --- CRONOLOGIA DOS MESES ---
+lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
-    st.markdown(f"### 👋 Olá, {st.session_state['username']}!")
-    st.write("Utilize o menu lateral do Streamlit para navegar entre as páginas de **Sócios** e **Finanças**.")
-    
-    # Recursos exclusivos da Página Inicial para o perfil Master
-    if st.session_state["user_role"] == "master":
-        st.write("---")
-        st.markdown("### 🛠️ Painel Administrativo Geral")
-        
-        # Botão de download do relatório financeiro consolidado
-        dados_txt = gerar_relatorio_texto()
-        st.download_button(
-            label="📥 Baixar Relatório Financeiro Geral",
-            data=dados_txt,
-            file_name="relatorio_financeiro_aro.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
+# --- CARREGAMENTO CENTRALIZADO DE BANCOS DE DADOS DO SISTEMA ---
+if "dados_socios_internos" not in st.session_state:
+    st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+
+if "saldo_anterior_master" not in st.session_state:
+    if os.path.exists("backup_saldo_ant.txt"):
+        with open("backup_saldo_ant.txt", "r") as f: st.session_state["saldo_anterior_master"] = float(f.read())
+    else: st.session_state["saldo_anterior_master"] = 0.0
+
+if "dados_meses_financeiros" not in st.session_state:
+    st.session_state["dados_meses_financeiros"] = pickle.load(open("backup_financas.pkl", "rb")) if os.path.exists("backup_financas.pkl") else {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
+
+if "dados_torneios_internos" not in st.session_state:
+    st.session_state["dados_torneios_internos"] = pickle.load(open("backup_torneios_v2.pkl", "rb")) if os.path.exists("backup_torneios_v2.pkl") else pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
+
+if "data_torneio_aro" not in st.session_state:
+    st.session_state["data_torneio_aro"] = open("backup_data_torneio.txt", "r").read() if os.path.exists("backup_data_torneio.txt") else "08/11/2026"
+
+# --- TELA: MENU PRINCIPAL / CAPA INTERNA ---
+c_l, c_t, c_o = st.columns(3)
+try:
+    if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
+except: pass
+
+c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+if c_o.button("🔒 Sair do Painel"):
+    st.session_state["autenticado"] = False
+    st.rerun()
+
+st.markdown("---")
+st.info("⭐ Modo Administrador: Acesso Master Ativado" if st.session_state["user_role"] == "master" else "ℹ️ Modo de Leitura: Acesso de Consulta Ativado")
+
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda do seu navegador ou celular para navegar entre as planilhas de Sócios, Finanças e Torneios de forma independente.</p>", unsafe_allow_html=True)
 
