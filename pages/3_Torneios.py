@@ -15,7 +15,7 @@ is_master = st.session_state.get("user_role") == "master"
 if "data_torneio_aro" not in st.session_state:
     st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
 if "torneio_inscricoes_aro" not in st.session_state:
-    st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor"])
+    st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
 
 df_inscritos = st.session_state["torneio_inscricoes_aro"]
 
@@ -29,6 +29,7 @@ else:
     st.markdown(f"### 📅 Torneio Dia: {st.session_state['data_torneio_aro'].strftime('%d/%m/%Y')}")
 
 # --- 2. CONTADORES LIMPOS ---
+st.markdown("### 📊 Estatísticas de Inscrição")
 especies_validas = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
 contagem = {esp: len(df_inscritos[df_inscritos["Espécie"] == esp]) if not df_inscritos.empty else 0 for esp in especies_validas}
 
@@ -55,10 +56,13 @@ if is_master:
                 livres = [x for x in range(1, limite + 1) if x not in ocupadas]
                 sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else limite + 1)
                 
+                # Regra de taxas e clube vinculados à escolha do Sócio
                 v_ficha = 25.00 if socio == "Sim" else 35.00
-                nova = pd.DataFrame([{"Proprietário": p.strip(), "Nome da Ave": n.strip(), "Espécie": e, "Anilha": a.strip(), "Estaca": int(sorteio), "Valor": v_ficha}])
+                clube_nome = "ARO" if socio == "Sim" else "Outro"
+                
+                nova = pd.DataFrame([{"Proprietário": p.strip(), "Nome da Ave": n.strip(), "Espécie": e, "Anilha": a.strip(), "Estaca": int(sorteio), "Valor": v_ficha, "Clube": clube_nome}])
                 st.session_state["torneio_inscricoes_aro"] = pd.concat([df_inscritos, nova], ignore_index=True)
-                st.success("Inscrito com sucesso!")
+                st.success(f"Inscrito com sucesso! Estaca: {sorteio} | Clube: {clube_nome}")
                 st.rerun()
 
 # --- 4. CONSULTA POR ABAS ---
@@ -73,8 +77,8 @@ for i, esp in enumerate(especies_validas):
         else:
             st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
-# --- 5. EMISSÃO DE PDF ADESIVO 10x7cm PRETO E BRANCO ---
-def gerar_pdf_fichas(df_dados):
+# --- 5. EMISSÃO DE PDF ADESIVO P&B COM DATA E CLUBE ---
+def gerar_pdf_fichas(df_dados, data_evento):
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     df_ordenado = df_dados.sort_values(by=["Espécie", "Estaca"])
@@ -90,27 +94,34 @@ def gerar_pdf_fichas(df_dados):
         pdf.setLineWidth(1.2)
         pdf.rect(px, py, largura_f, altura_f)
         
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawCentredString(px + (largura_f/2), py + altura_f - 16, "ARO RIO DO SUL - TORNEIO OFICIAL")
-        pdf.line(px + 6, py + altura_f - 22, px + largura_f - 6, py + altura_f - 22)
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.drawCentredString(px + (largura_f/2), py + altura_f - 14, "ARO RIO DO SUL - TORNEIO OFICIAL")
         
-        pdf.setFont("Helvetica-Bold", 22)
-        pdf.drawCentredString(px + (largura_f/2), py + altura_f - 46, f"ESTACA: {int(r['Estaca']):02d}")
-        pdf.line(px + 6, py + altura_f - 54, px + largura_f - 6, py + altura_f - 54)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawCentredString(px + (largura_f/2), py + altura_f - 25, f"DATA DO EVENTO: {data_evento}")
+        pdf.line(px + 6, py + altura_f - 30, px + largura_f - 6, py + altura_f - 30)
         
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(px + 12, py + altura_f - 70, "AVE:")
-        pdf.drawString(px + 12, py + altura_f - 88, "CRIADOR:")
-        pdf.drawString(px + 12, py + altura_f - 106, "ANILHA:")
-        pdf.drawString(px + 12, py + altura_f - 124, "ESPÉCIE:")
+        # Estaca em destaque gigante
+        pdf.setFont("Helvetica-Bold", 20)
+        pdf.drawCentredString(px + (largura_f/2), py + altura_f - 51, f"ESTACA: {int(r['Estaca']):02d}")
+        pdf.line(px + 6, py + altura_f - 57, px + largura_f - 6, py + altura_f - 57)
         
-        pdf.setFont("Helvetica", 11)
-        pdf.drawString(px + 45, py + altura_f - 70, str(r['Nome da Ave']))
-        pdf.drawString(px + 75, py + altura_f - 88, str(r['Proprietário']))
-        pdf.drawString(px + 68, py + altura_f - 106, str(r['Anilha']))
-        pdf.drawString(px + 75, py + altura_f - 124, str(r['Espécie']).upper())
+        # Informações da Ave com Fonte Expandida (Preenchendo o espaço)
+        pdf.setFont("Helvetica-Bold", 10.5)
+        pdf.drawString(px + 12, py + altura_f - 71, "AVE:")
+        pdf.drawString(px + 12, py + altura_f - 86, "CRIADOR:")
+        pdf.drawString(px + 12, py + altura_f - 101, "ANILHA:")
+        pdf.drawString(px + 12, py + altura_f - 116, "CLUBE:")
+        pdf.drawString(px + 12, py + altura_f - 131, "ESPÉCIE:")
         
-        pdf.setFont("Helvetica-Bold", 11)
+        pdf.setFont("Helvetica", 10.5)
+        pdf.drawString(px + 45, py + altura_f - 71, str(r['Nome da Ave']))
+        pdf.drawString(px + 75, py + altura_f - 86, str(r['Proprietário']))
+        pdf.drawString(px + 68, py + altura_f - 101, str(r['Anilha']))
+        pdf.drawString(px + 65, py + altura_f - 116, str(r['Clube']).upper()) # Exibição do Clube adicionada
+        pdf.drawString(px + 75, py + altura_f - 131, str(r['Espécie']).upper())
+        
+        pdf.setFont("Helvetica-Bold", 10.5)
         pdf.drawRightString(px + largura_f - 12, py + 12, f"VALOR: R$ {float(r['Valor']):,.2f}")
         
         x_at += 1
@@ -127,10 +138,11 @@ def gerar_pdf_fichas(df_dados):
 if is_master and not df_inscritos.empty:
     st.write("---")
     st.markdown("### 🖨️ Central de Impressão Adesiva")
-    pdf_b = gerar_pdf_fichas(df_inscritos)
+    dt_str = st.session_state["data_torneio_aro"].strftime('%d/%m/%Y')
+    pdf_b = gerar_pdf_fichas(df_inscritos, dt_str)
     st.download_button(label="📥 Baixar Fichas em PDF (Preto e Branco - 10x7cm)", data=pdf_b, file_name="fichas_aro.pdf", mime="application/pdf", use_container_width=True)
 
-# --- 6. EXCLUSÃO INDIVIDUAL NO CELULAR ---
+# --- 6. EXCLUSÃO CELULAR ---
 if is_master and not df_inscritos.empty:
     st.write("---")
     st.markdown("### 🗑️ Remover Inscrição")
@@ -149,6 +161,6 @@ if is_master:
     st.markdown("### ⚠️ Configurações Avançadas")
     if st.checkbox("💥 ATIVAR CONFIRMAÇÃO PARA RESETAR O TORNEIO"):
         if st.button("🗑️ ZERAR TORNEIO COMPLETO", type="primary", use_container_width=True):
-            st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor"])
+            st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
             st.warning("Torneio zerado com sucesso!")
             st.rerun()
