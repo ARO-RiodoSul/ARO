@@ -1,7 +1,3 @@
-# FORÇAR O CARREGAMENTO DAS TRÊS PÁGINAS DO GITHUB NO MENU LATERAL
-st.Page("pages/1_Socios.py", title="👥 Sócios", icon="👥")
-st.Page("pages/2_Financas.py", title="💰 Finanças", icon="💰")
-st.Page("pages/3_Torneios.py", title="🦅 Torneios", icon="🦅")
 import streamlit as st
 import pandas as pd
 import os, pickle
