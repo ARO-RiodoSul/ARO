@@ -32,7 +32,7 @@ while current <= end_date:
     else:
         current = datetime.date(current.year, current.month + 1, 1)
 
-# AJUSTE CHAVE: Inicializa como uma tabela dinâmica vazia para permitir o botão "+"
+# Inicializa como uma tabela dinâmica vazia para permitir o botão "+"
 for m in lista_meses:
     if m not in st.session_state["financas_data"]["meses"]:
         st.session_state["financas_data"]["meses"][m] = pd.DataFrame(
@@ -56,9 +56,8 @@ saldo_total = saldo_anterior + saldo_gestao
 # --- 1. MENU PRINCIPAL (Layout Solicitado por Você) ---
 st.markdown("### 📊 Resumo Consolidado Geral")
 
-# Saldo Anterior no topo
-col_topo = st.columns(1)
-with col_topo:
+# Saldo Anterior no topo (Correção do bloco utilizando container para evitar o TypeError)
+with st.container():
     if is_master:
         novo_saldo_anterior = st.number_input("Saldo Anterior (R$)", value=float(saldo_anterior), step=100.0, key="edit_saldo_ant")
         if novo_saldo_anterior != saldo_anterior:
@@ -71,18 +70,18 @@ st.write("---")
 
 # Total de Entradas e Saídas abaixo
 col_meio = st.columns(2)
-with col_meio:
+with col_meio[0]:
     st.metric(label="Total de Entradas", value=f"R$ {total_entradas_geral:,.2f}")
-with col_meio:
+with col_meio[1]:
     st.metric(label="Total de Saídas", value=f"R$ {total_saidas_geral:,.2f}")
 
 st.write("---")
 
 # Saldos da Gestão e Total embaixo
 col_baixo = st.columns(2)
-with col_baixo:
+with col_baixo[0]:
     st.metric(label="Saldo (Gestão Atual)", value=f"R$ {saldo_gestao:,.2f}")
-with col_baixo:
+with col_baixo[1]:
     st.metric(label="Saldo (Total)", value=f"R$ {saldo_total:,.2f}")
 
 st.write("---")
@@ -99,15 +98,15 @@ total_saidas_mes = pd.to_numeric(df_atual["Saídas"], errors='coerce').fillna(0)
 saldo_mes = total_entradas_mes - total_saidas_mes
 
 col_mes_totais = st.columns(3)
-col_mes_totais.metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
-col_mes_totais.metric("Saídas do Mês", f"R$ {total_saidas_mes:,.2f}")
-col_mes_totais.metric("Balanço do Mês", f"R$ {saldo_mes:,.2f}")
+col_mes_totais[0].metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
+col_mes_totais[1].metric("Saídas do Mês", f"R$ {total_saidas_mes:,.2f}")
+col_mes_totais[2].metric("Balanço do Mês", f"R$ {saldo_mes:,.2f}")
 
 st.write("")
 st.markdown(f"**Tabela de Movimentações - {mes_selecionado}**")
 
 if is_master:
-    # num_rows="dynamic" agora vai funcionar perfeitamente sem travar ou sumir o botão "+"
+    # num_rows="dynamic" ativo para permitir o botão "+"
     df_editado = st.data_editor(
         df_atual,
         hide_index=True,
@@ -137,4 +136,3 @@ else:
             "Motivo": "Motivo/Descrição"
         }
     )
-
