@@ -1,22 +1,19 @@
 import streamlit as st
 import pandas as pd
 import os, pickle, random
-from datetime import datetime
 
-# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
-st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
-
-# FORÇAR CONFIGURAÇÃO DE LOGO NO CELULAR
+# CONFIGURAÇÃO GERAL
+st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="📊", layout="wide")
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
+# TELA DE LOGIN PROTEGIDA
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
-        _, col_img, _ = st.columns(3)
-        col_img.image("logo.png", use_container_width=True)
+        st.columns(3)[1].image("logo.png", use_container_width=True)
     else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
         u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
@@ -26,33 +23,27 @@ if not st.session_state["autenticado"]:
             else: st.error("Incorreto.")
     st.stop()
 
-# --- CARREGAMENTO DE BANCOS DE DADOS ---
-if "dados_socios_internos" not in st.session_state:
-    st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+# --- SISTEMA DE BACKUP DE DADOS UNIFICADO ---
+def carregar_dados():
+    if "dados_socios_internos" not in st.session_state:
+        st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+    if "saldo_anterior_master" not in st.session_state:
+        st.session_state["saldo_anterior_master"] = float(open("backup_saldo_ant.txt", "r").read()) if os.path.exists("backup_saldo_ant.txt") else 0.0
+    if "dados_meses_financeiros" not in st.session_state:
+        st.session_state["dados_meses_financeiros"] = pickle.load(open("backup_financas.pkl", "rb")) if os.path.exists("backup_financas.pkl") else {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
+    if "dados_torneios_internos" not in st.session_state:
+        st.session_state["dados_torneios_internos"] = pickle.load(open("backup_torneios_v2.pkl", "rb")) if os.path.exists("backup_torneios_v2.pkl") else pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
+    if "data_torneio_aro" not in st.session_state:
+        st.session_state["data_torneio_aro"] = open("backup_data_torneio.txt", "r").read() if os.path.exists("backup_data_torneio.txt") else "08/11/2026"
 
 lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
-
-if "saldo_anterior_master" not in st.session_state:
-    if os.path.exists("backup_saldo_ant.txt"):
-        with open("backup_saldo_ant.txt", "r") as f: st.session_state["saldo_anterior_master"] = float(f.read())
-    else: st.session_state["saldo_anterior_master"] = 0.0
-
-if "dados_meses_financeiros" not in st.session_state:
-    st.session_state["dados_meses_financeiros"] = pickle.load(open("backup_financas.pkl", "rb")) if os.path.exists("backup_financas.pkl") else {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
-
-if "data_torneio_aro" not in st.session_state:
-    if os.path.exists("backup_data_torneio.txt"):
-        with open("backup_data_torneio.txt", "r") as f: st.session_state["data_torneio_aro"] = f.read()
-    else: st.session_state["data_torneio_aro"] = datetime.now().strftime("%d/%m/%Y")
-
-if "dados_torneios_internos" not in st.session_state:
-    st.session_state["dados_torneios_internos"] = pickle.load(open("backup_torneios_v2.pkl", "rb")) if os.path.exists("backup_torneios_v2.pkl") else pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
+carregou = carregar_dados()
 
 t_ent = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Entradas"], errors='coerce').sum() for m in lista_meses)
 t_sai = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Saídas"], errors='coerce').sum() for m in lista_meses)
 s_ges, s_tot = t_ent - t_sai, t_ent + st.session_state["saldo_anterior_master"] - t_sai
 
-# --- LÓGICA DE SORTEIO DE ESTACAS AUTOMÁTICA ---
+# --- SORTEIO INTELIGENTE DE ESTACAS ---
 def sortear_estaca(esp, df_t):
     ocupadas = df_t[df_t["Espécie"] == esp]["Estaca"].tolist()
     lim, prox = (50, 51) if esp in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else ((25, 26) if esp in ["Canário", "Azulão"] else (5, 6))
@@ -60,6 +51,18 @@ def sortear_estaca(esp, df_t):
     if livres: return random.choice(livres)
     while prox in ocupadas: prox += 1
     return prox
+
+def gerar_relatorio_texto():
+    txt = "========================================================\n        RELATÓRIO FINANCEIRO COMPLETO - ARO RIO DO SUL\n========================================================\n\n"
+    for m in lista_meses:
+        df_m_p = st.session_state["dados_meses_financeiros"][m]
+        df_at = df_m_p[(df_m_p["Entradas"] > 0) | (df_m_p["Saídas"] > 0) | (df_m_p["Motivo"] != "")]
+        txt += f"--------- PERÍODO: {m} ---------\n"
+        if not df_at.empty:
+            for _, r in df_at.iterrows(): txt += f"Dia {int(r['Dia'])} | Entrada: R$ {r['Entradas']:.2f} | Saída: R$ {r['Saídas']:.2f} | Motivo: {r['Motivo']}\n"
+        else: txt += "Nenhum lançamento ativo.\n"
+        txt += f"TOTAL ENTRADAS: R$ {df_m_p['Entradas'].sum():.2f} | TOTAL SAÍDAS: R$ {df_m_p['Saídas'].sum():.2f}\n\n"
+    return txt + f" FECHAMENTO CONSOLIDADO \nSaldo Anterior: R$ {st.session_state['saldo_anterior_master']:.2f}\nEntradas: R$ {t_ent:.2f}\nSaídas: R$ {t_sai:.2f}\nGestão: R$ {s_ges:.2f}\nTotal: R$ {s_tot:.2f}\n"
 
 # --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
@@ -94,6 +97,7 @@ elif st.session_state["tela_atual"] == "socios":
 elif st.session_state["tela_atual"] == "caixa":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("🪙 Controle Financeiro - Finanças")
+    if st.session_state["user_role"] == "master": st.download_button(label="📥 Baixar Relatório Financeiro Geral", data=gerar_relatorio_texto(), file_name="relatorio_financeiro_aro.txt", mime="text/plain", use_container_width=True)
     _, c_ant, _ = st.columns(3)
     with c_ant:
         st.markdown("<h3 style='text-align: center;'>🏦 Saldo Anterior</h3>", unsafe_allow_html=True)
@@ -120,10 +124,10 @@ elif st.session_state["tela_atual"] == "caixa":
             st.toast("💾 Salvo!"); st.rerun()
     else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
 
-# --- TELA 4: TORNEIOS ---
+# --- TELA 4: TORNEIOS (COMPACTADA, LEVE E COMPLETA SEM RISCO DE CORTES) ---
 elif st.session_state["tela_atual"] == "torneios":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
-    st.title("🏆 Gerenciamento de Torneios & Inscrições")
+    st.title("🏆 Módulo de Torneios - Inscrições")
     st.markdown("---")
     
     _, c_date, _ = st.columns(3)
@@ -131,22 +135,44 @@ elif st.session_state["tela_atual"] == "torneios":
         st.markdown("📅 **Data do Torneio:**", unsafe_allow_html=True)
         if st.session_state["user_role"] == "master":
             n_dt = st.text_input("Editar Data", value=st.session_state["data_torneio_aro"], label_visibility="collapsed")
-            if n_dt != st.session_state["data_torneio_aro"]:
-                st.session_state["data_torneio_aro"] = n_dt
-                open("backup_data_torneio.txt", "w").write(n_dt); st.rerun()
-        else: st.markdown(f"#### {st.session_state['data_torneio_aro']}", unsafe_allow_html=True)
-
-    df_t = st.session_state["dados_torneios_internos"]
-    esp_lista = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
-    
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    m1.metric("🪵 Trinca Ferro", f"{len(df_t[df_t['Espécie'] == 'Trinca Ferro'])} aves")
-    m2.metric("🌱 Coleiro", f"{len(df_t[df_t['Espécie'] == 'Coleiro'])} aves")
-    m3.metric("🌶️ Bico de Pimenta", f"{len(df_t[df_t['Espécie'] == 'Bico de Pimenta'])} aves")
-    m4.metric("💛 Canário", f"{len(df_t[df_t['Espécie'] == 'Canário'])} aves")
-    m5.metric("🔵 Azulão", f"{len(df_t[df_t['Espécie'] == 'Azulão'])} aves")
-    m6.metric("🐦 Tiziu", f"{len(df_t[df_t['Espécie'] == 'Tiziu'])} aves")
-    st.markdown("---")
-
-    if st.session_state["user_role"] == "master":
-        st.subheader("➕ Realizar Nova Inscrição")
+if n_dt != st.session_state["data_torneio_aro"]:
+st.session_state["data_torneio_aro"] = n_dt
+open("backup_data_torneio.txt", "w").write(n_dt); st.rerun()
+else: st.markdown(f"#### {st.session_state['data_torneio_aro']}", unsafe_allow_html=True)
+df_t = st.session_state["dados_torneios_internos"]
+esp_lista = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
+# Exibição dos 6 ícones com os contadores de inscritos em tempo real
+m1, m2, m3, m4, m5, m6 = st.columns(6)
+m1.metric("🪵 Trinca Ferro", f"{len(df_t[df_t['Espécie'] == 'Trinca Ferro'])} aves")
+m2.metric("🌱 Coleiro", f"{len(df_t[df_t['Espécie'] == 'Coleiro'])} aves")
+m3.metric("🌶️ Bico de Pimenta", f"{len(df_t[df_t['Espécie'] == 'Bico de Pimenta'])} aves")
+m4.metric("💛 Canário", f"{len(df_t[df_t['Espécie'] == 'Canário'])} aves")
+m5.metric("🔵 Azulão", f"{len(df_t[df_t['Espécie'] == 'Azulão'])} aves")
+m6.metric("🐦 Tiziu", f"{len(df_t[df_t['Espécie'] == 'Tiziu'])} aves")
+st.markdown("---")
+# Form de Cadastro (Visível Apenas para o Master)
+if st.session_state["user_role"] == "master":
+st.subheader("➕ Realizar Nova Inscrição de Ave")
+with st.form("f_ins_torneio", clear_on_submit=True):
+c1, c2 = st.columns(2)
+prop = c1.text_input("Proprietário")
+ave = c2.text_input("Nome da Ave")
+c3, c4 = st.columns(2)
+esp = c3.selectbox("Espécie", esp_lista)
+anil = c4.text_input("Anilha")
+if st.form_submit_button("Inscrição e Sorteio de Estaca"):
+if prop and ave and anil:
+estaca_sorteada = sortear_estaca(esp, df_t)
+nova_linha = pd.DataFrame([{"Proprietário": prop, "Nome da Ave": ave, "Espécie": esp, "Anilha": anil, "Estaca": estaca_sorteada}])
+st.session_state["dados_torneios_internos"] = pd.concat([df_t, nova_linha], ignore_index=True)
+pickle.dump(st.session_state["dados_torneios_internos"], open("backup_torneios_v2.pkl", "wb"))
+st.success(f"Sucesso! Ave jogada na Lista de {esp} - Estaca {estaca_sorteada}")
+st.rerun()
+else: st.error("Preencha todos os campos.")
+st.markdown("---")
+st.subheader("📋 Consultar Listas de Inscritos por Espécie")
+esp_abas = st.radio("Escolha a Espécie:", esp_lista, horizontal=True)
+df_filtrado = df_t[df_t["Espécie"] == esp_abas].copy()
+if not df_filtrado.empty:
+st.dataframe(df_filtrado[["Proprietário", "Nome da Ave", "Anilha", "Estaca"]].sort_values(by="Estaca"), use_container_width=True, hide_index=True)
+else: st.info(f"Nenhuma ave cadastrada para {esp_abas} neste torneio.")
