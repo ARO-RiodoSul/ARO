@@ -22,7 +22,7 @@ if not st.session_state["autenticado"]:
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)])
 
-# CORREÇÃO DA SINTAXE DA LISTA DE MESES
+# CORREÇÃO DEFINITIVA DA CRONOLOGIA DOS MESES
 lista_meses = ["Dezembro 2026"]
 for a in:
     for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]:
@@ -69,7 +69,7 @@ def gerar_relatorio_texto():
     return txt
 
 if st.session_state["tela_atual"] == "menu":
-    c_l, c_t, c_o = st.columns([1, 4, 1])
+    c_l, c_t, c_o = st.columns(3)
     if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
     c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     if c_o.button("🔒 Sair"): st.session_state["autenticado"] = False; st.rerun()
