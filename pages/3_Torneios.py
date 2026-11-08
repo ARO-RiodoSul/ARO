@@ -10,7 +10,6 @@ st.title("🦅 Gestão de Torneios - ARO Rio do Sul")
 
 is_master = st.session_state.get("user_role") == "master"
 
-# Configuração de data segura
 if "data_torneio_aro" not in st.session_state or st.session_state["data_torneio_aro"] is None:
     st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
 elif isinstance(st.session_state["data_torneio_aro"], str):
@@ -22,7 +21,7 @@ elif isinstance(st.session_state["data_torneio_aro"], str):
             continue
 
 if "torneio_inscricoes_aro" not in st.session_state:
-    st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
+    st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor"])
 
 df_inscritos = st.session_state["torneio_inscricoes_aro"]
 
@@ -54,7 +53,7 @@ st.write("")
 st.info(f"✨ **TOTAL DE GAIOLAS / AVES INSCRITAS:** {total_geral}")
 st.write("---")
 
-# --- 3. INSCRIÇÃO ---
+# --- 3. FORMULÁRIO DE INSCRIÇÃO ---
 if is_master:
     st.markdown("### 📝 Nova Inscrição de Ave")
     with st.form("form_inscrever", clear_on_submit=True):
@@ -62,6 +61,8 @@ if is_master:
         n = st.text_input("Nome da Ave:")
         e = st.selectbox("Espécie:", especies_validas)
         a = st.text_input("Anilha:")
+        socio_op = st.selectbox("Sócio?", ["Sim", "Não"])
+        
         if st.form_submit_button("Inscrever Ave", use_container_width=True):
             if p.strip() and n.strip() and a.strip():
                 ocupadas = df_inscritos[df_inscritos["Espécie"] == e]["Estaca"].tolist()
@@ -69,7 +70,9 @@ if is_master:
                 livres = [x for x in range(1, limite + 1) if x not in ocupadas]
                 sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else limite + 1)
                 
-                nova = pd.DataFrame([{"Proprietário": p.strip(), "Nome da Ave": n.strip(), "Espécie": e, "Anilha": a.strip(), "Estaca": int(sorteio)}])
+                valor_ficha = 25.00 if socio_op == "Sim" else 35.00
+                
+                nova = pd.DataFrame([{"Proprietário": p.strip(), "Nome da Ave": n.strip(), "Espécie": e, "Anilha": a.strip(), "Estaca": int(sorteio), "Valor": valor_ficha}])
                 st.session_state["torneio_inscricoes_aro"] = pd.concat([df_inscritos, nova], ignore_index=True)
                 st.success(f"Sucesso! Ave inscrita na Estaca: {sorteio}")
                 st.rerun()
@@ -86,9 +89,47 @@ for i, esp in enumerate(especies_validas):
         if df_f.empty:
             st.info(f"Nenhum pássaro cadastrado em {esp}.")
         else:
-            st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d")}, use_container_width=True)
+            st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Taxa (R$)", format="%.2f")}, use_container_width=True)
 
-# --- 5. IMAGEM WHATSAPP ---
+# --- 5. IMPRESSÃO DE FICHAS DE GAIOLA (10x7 cm) ---
+if is_master and not df_inscritos.empty:
+    st.write("---")
+    st.markdown("### 🖨️ Fichas de Gaiola para Impressão (10x7 cm)")
+    
+    if st.button("📄 Gerar Bloco de Fichas Prontos para Impressão", use_container_width=True):
+        st.success("Fichas estruturadas com sucesso abaixo! Pressione Ctrl+P no teclado para imprimir.")
+        st.write("---")
+        
+        df_fichas = df_inscritos.sort_values(by=["Espécie", "Estaca"])
+        
+        st.markdown("""
+        <style>
+            .grid-fichas { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+            .ficha { width: 10cm; height: 7cm; border: 2px solid #D4AF37; padding: 8px; box-sizing: border-box; background-color: #FAFAFA; color: #111; font-family: sans-serif; overflow: hidden; }
+            .ficha-header { text-align: center; font-weight: bold; border-bottom: 2px solid #111; padding-bottom: 2px; margin-bottom: 4px; font-size: 13px; }
+            .ficha-estaca { font-size: 20px; font-weight: bold; text-align: center; color: #D4AF37; background: #111; padding: 2px; border-radius: 4px; margin-bottom: 6px; }
+            .ficha-linha { font-size: 12px; margin-bottom: 3px; border-bottom: 1px dashed #ccc; padding-bottom: 1px; }
+            .ficha-valor { font-size: 13px; font-weight: bold; text-align: right; color: #B22222; margin-top: 5px; }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        conteudo_html = '<div class="grid-fichas">'
+        for _, row in df_fichas.iterrows():
+            conteudo_html += f"""
+            <div class="ficha">
+                <div class="ficha-header">ARO RIO DO SUL - TORNEIO OFICIAL</div>
+                <div class="ficha-estaca">ESTACA / GAIOLA: {int(row['Estaca']):02d}</div>
+                <div class="ficha-linha"><b>Espécie:</b> {row['Espécie'].upper()}</div>
+                <div class="ficha-linha"><b>Canário/Ave:</b> {row['Nome da Ave']}</div>
+                <div class="ficha-linha"><b>Criador:</b> {row['Proprietário']}</div>
+                <div class="ficha-linha"><b>Nº Anilha:</b> {row['Anilha']}</div>
+                <div class="ficha-valor">VALOR A PAGAR: R$ {float(row['Valor']):,.2f}</div>
+            </div>
+            """
+        conteudo_html += '</div>'
+        st.markdown(conteudo_html, unsafe_allow_html=True)
+
+# --- 6. IMAGEM WHATSAPP ---
 def criar_imagem(dt, mapa, total):
     W, H = 600, 520
     img = Image.new("RGB", (W, H), "#111625")
@@ -120,7 +161,7 @@ if is_master and not df_inscritos.empty:
     st.image(img_b, width=380)
     st.download_button("📥 Baixar Cartaz para WhatsApp", data=img_b, file_name="aro_torneio.png", mime="image/png", use_container_width=True)
 
-# --- 6. EXCLUSÃO CELULAR ---
+# --- 7. EXCLUSÃO CELULAR ---
 if is_master and not df_inscritos.empty:
     st.write("---")
     st.markdown("### 🗑️ Cancelar Inscrição")
@@ -133,12 +174,12 @@ if is_master and not df_inscritos.empty:
             st.success("Ave removida!")
             st.rerun()
 
-# --- 7. ZERAR TORNEIO COMPLETO ---
+# --- 8. ZERAR TORNEIO COMPLETO ---
 if is_master:
     st.write("---")
     st.markdown("### ⚠️ Zona de Perigo Administrativa")
     if st.checkbox("💥 CONFIRMAR EXCLUSÃO DE TODOS OS INSCRITOS", key="chk_reset"):
         if st.button("🗑️ ZERAR TORNEIO COMPLETO", type="primary", use_container_width=True):
-            st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
+            st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor"])
             st.warning("Torneio resetado com sucesso!")
             st.rerun()
