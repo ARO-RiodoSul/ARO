@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
 import datetime, random, io, pickle, os
-
-# Importações nativas do ReportLab para desenhar o PDF em A4 sem erros
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from reportlab.lib import colors
 from reportlab.lib.units import cm
+from reportlab.lib import colors
 
 st.set_page_config(page_title="Torneios - ARO", page_icon="🦅", layout="wide")
 
@@ -70,7 +68,6 @@ for i, esp in enumerate(especies_validas):
     cols[i].metric(label=esp, value=str(contagem[esp]))
 st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
-# --- FILA DE APROVAÇÃO ---
 if is_admin:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
@@ -79,7 +76,7 @@ if is_admin:
     else:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
-                c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
+                c_inf, c_b1, c_b2 = st.columns()
                 c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
                 
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
@@ -97,16 +94,14 @@ if is_admin:
                     st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_c], ignore_index=True)
                     st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
                     salvar_dados_fisicos()
-                    st.success("Inscrição aprovada com sucesso!")
+                    st.success("Aprovada!")
                     st.rerun()
                     
                 if c_b2.button("❌ Recusar", key=f"re_{idx}", use_container_width=True):
                     st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
                     salvar_dados_fisicos()
-                    st.warning("Inscrição recusada!")
+                    st.warning("Recusada!")
                     st.rerun()
-
-# --- SEÇÃO: MINHAS INSCRIÇÕES (ACOMPANHAMENTO DO SÓCIO) ---
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
 lista_status = []
@@ -126,7 +121,6 @@ if len(lista_status) == 0:
 else:
     st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
-# --- FORMULÁRIO DE INSCRIÇÃO ---
 st.write("---")
 st.markdown("### 📝 Solicitar Inscrição de Ave")
 df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
@@ -155,10 +149,9 @@ else:
             
             st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
             salvar_dados_fisicos()
-            st.success("🎯 Solicitado com sucesso! Verifique a tabela acima.")
+            st.success("🎯 Solicitado com sucesso!")
             st.rerun()
 
-# --- CONFIRMADOS EM ABAS ---
 st.write("---")
 st.markdown("### 🏆 Competidores Confirmados por Categoria")
 abas = st.tabs(especies_validas)
@@ -170,34 +163,78 @@ for i, esp in enumerate(especies_validas):
         else: 
             st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
-# --- FUNÇÃO DO CANVAS PARA PARSER EM FOLHA A4 (2 COLUNAS X 4 LINHAS) ---
 def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
+    canvas_obj = canvas.Canvas(buf, pagesize=A4)
     data_str = data_torneio.strftime('%d/%m/%Y')
+    m_x, m_y, f_w, f_h = 0.5 * cm, 0.8 * cm, 10.0 * cm, 7.0 * cm
     
-    margem_x = 0.5 * cm
-    margem_y = 0.8 * cm
-    ficha_w = 10.0 * cm
-    ficha_h = 7.0 * cm
+    for idx, r in df_inscritos.iterrows():
+        pos = idx % 8
+        if pos == 0 and idx > 0:
+            canvas_obj.showPage()
+        col = pos % 2
+        lin = 3 - (pos // 2)
+        x = m_x + (col * f_w)
+        y = m_y + (lin * f_h)
+        
+        v_str = "R$ 25,00" if str(r.get("Clube", "")).upper() == "ARO" else "R$ 35,00"
+        est_str = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
+        
+        canvas_obj.setStrokeColor(colors.black)
+        canvas_obj.rect(x, y, f_w, f_h, stroke=1, fill=0)
+        canvas_obj.line(x, y + 5.5*cm, x + f_w, y + 5.5*cm)
+        canvas_obj.setFont("Helvetica-Bold", 11)
+        canvas_obj.drawCentredString(x + 5.0*cm, y + 5.9*cm, "ARO - RIO DO SUL")
+        canvas_obj.setFont("Helvetica", 9)
+        canvas_obj.drawString(x + 0.4*cm, y + 4.8*cm, f"Data: {data_str}")
+        canvas_obj.setFont("Helvetica-Bold", 10)
+        canvas_obj.drawString(x + 6.0*cm, y + 4.8*cm, f"Estaca: {est_str}")
+        
+        canvas_obj.setFont("Helvetica", 9)
+        canvas_obj.drawString(x + 0.4*cm, y + 3.7*cm, f"Proprietário: {str(r['Proprietário'])[:35]}")
+        canvas_obj.drawString(x + 0.4*cm, y + 2.6*cm, f"Ave: {str(r['Nome da Ave'])[:20]}")
+        canvas_obj.drawString(x + 0.4*cm, y + 1.5*cm, f"Espécie: {str(r['Espécie'])}")
+        canvas_obj.drawString(x + 0.4*cm, y + 0.4*cm, f"Anilha: {str(r['Anilha'])}")
+        canvas_obj.setFont("Helvetica-Bold", 10)
+        canvas_obj.drawString(x + 6.0*cm, y + 0.4*cm, f"Valor: {v_str}")
+        
+    canvas_obj.save()
+    buf.seek(0)
+    return buf
+
+if role_atual == "master":
+    st.write("---")
+    st.markdown("### ⚙️ Ferramentas Avançadas do Master")
+    col_bt1, col_bt2 = st.columns(2)
     
-    contador = 0
-    for _, r in df_inscritos.iterrows():
-        pos_pagina = contador % 8
-        if pos_pagina == 0 and contador > 0:
-            c.showPage()
+    with col_bt1:
+        st.markdown("**🖨️ Impressão de Fichas**")
+        if not df_inscritos_atual.empty:
+            pdf_pronto = gerar_pdf_fichas_canvas(df_inscritos_atual, st.session_state["data_torneio_aro"])
+            st.download_button(label="📥 Imprimir Todas as Fichas (A4 - 10x7cm)", data=pdf_pronto, file_name="fichas_completas_aro.pdf", mime="application/pdf", use_container_width=True)
+        else:
+            st.caption("Nenhuma ave confirmada para emitir fichas.")
             
-        col = pos_pagina % 2
-        lin = 3 - (pos_pagina // 2)
-        
-        x = margem_x + (col * ficha_w)
-        y = margem_y + (lin * ficha_h)
-        
-        valor_str = "R$ 25,00" if str(r.get("Clube", "")).upper() == "ARO" else "R$ 35,00"
-        estaca_str = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
-        
-        c.setStrokeColor(colors.black)
-        c.setLineWidth(1)
-        c.rect(x, y, ficha_w, ficha_h, stroke=1, fill=0)
-        
-        c.setLineWidth(0.5)
+    with col_bt2:
+        st.markdown("**🚨 Controle de Temporada**")
+        if st.checkbox("Habilitar botão para RESETAR o torneio"):
+            if st.button("💥 EXCLUIR TORNEIO TODO (ZERAR)", use_container_width=True, type="primary"):
+                st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
+                st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
+                salvar_dados_fisicos()
+                st.success("Torneio excluído com sucesso!")
+                st.rerun()
+
+    if not df_inscritos_atual.empty:
+        st.write("---")
+        st.markdown("### 🗑️ Cancelamento Manual Individual")
+        opc_lista = [f"[{r['Espécie']}] Estaca {r['Estaca']} - {r['Nome da Ave']} ({r['Proprietário']})" for _, r in df_inscritos_atual.iterrows()]
+        ave_remover = st.selectbox("Escolha uma ave para deletar:", opc_lista)
+        if st.checkbox("Confirmo a exclusão desta ave isolada"):
+            if st.button("❌ Excluir Ave Selecionada", use_container_width=True):
+                idx_alvo = opc_lista.index(ave_remover)
+                st.session_state["dados_torneios_internos"] = df_inscritos_atual.drop(df_inscritos_atual.index[idx_alvo]).reset_index(drop=True)
+                salvar_dados_fisicos()
+                st.success("Ave removida com sucesso!")
+                st.rerun()
