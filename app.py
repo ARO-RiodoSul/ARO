@@ -2,14 +2,19 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
-st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="📊", layout="wide")
+# CONFIGURAÇÃO DA PÁGINA (Agora apontando a logo.png como o ícone oficial do App)
+st.set_page_config(
+    page_title="Painel - ARO Rio do Sul", 
+    page_icon="logo.png" if os.path.exists("logo.png") else "📊", 
+    layout="wide"
+)
 
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"): st.columns(3)[1].image("logo.png", use_container_width=True)
+    if os.path.exists("logo.png"): st.columns(3).image("logo.png", use_container_width=True)
     else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
         u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
@@ -22,7 +27,6 @@ if not st.session_state["autenticado"]:
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)])
 
-# CRONOLOGIA DOS MESES DECLARADA DIRETAMENTE SEM O LAÇO COM ERRO
 lista_meses = ["Dezembro 2026", 
                "Janeiro 2027", "Fevereiro 2027", "Março 2027", "Abril 2027", "Maio 2027", "Junho 2027", "Julho 2027", "Agosto 2027", "Setembro 2027", "Outubro 2027", "Novembro 2027", "Dezembro 2027",
                "Janeiro 2028", "Fevereiro 2028", "Março 2028", "Abril 2028", "Maio 2028", "Junho 2028", "Julho 2028", "Agosto 2028", "Setembro 2028", "Outubro 2028", "Novembro 2028", "Dezembro 2028"]
