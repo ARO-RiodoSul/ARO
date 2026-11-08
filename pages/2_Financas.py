@@ -20,7 +20,7 @@ is_master = st.session_state.get("user_role") == "master"
 # Cronologia dos meses idêntica ao app.py
 lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
-# Garantir carregamento centralizado e inicializar com dias fixos de 1 a 31
+# Garantir carregamento centralizado na memória viva viva
 if "dados_meses_financeiros" not in st.session_state:
     st.session_state["dados_meses_financeiros"] = {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
 
@@ -29,7 +29,7 @@ if "saldo_anterior_master" not in st.session_state:
 
 df_global_financas = st.session_state["dados_meses_financeiros"]
 
-# --- CÁLCULO DOS TOTAIS ACUMULADOS ---
+# --- CÁLCULO DOS TOTAIS ACUMULADOS RECALCULADOS ---
 total_entradas_geral = 0.0
 total_saidas_geral = 0.0
 
@@ -51,9 +51,6 @@ with st.container():
         novo_saldo_anterior = st.number_input("Saldo Anterior (R$)", value=float(saldo_anterior), step=100.0, key="edit_saldo_ant")
         if novo_saldo_anterior != saldo_anterior:
             st.session_state["saldo_anterior_master"] = novo_saldo_anterior
-            try:
-                with open("backup_saldo_ant.txt", "w") as f: f.write(str(novo_saldo_anterior))
-            except: pass
             st.rerun()
     else:
         st.metric(label="Saldo Anterior", value=f"R$ {saldo_anterior:,.2f}")
@@ -61,18 +58,14 @@ with st.container():
 st.write("---")
 
 col_meio_1, col_meio_2 = st.columns(2)
-with col_meio_1:
-    st.metric(label="Total de Entradas", value=f"R$ {total_entradas_geral:,.2f}")
-with col_meio_2:
-    st.metric(label="Total de Saídas", value=f"R$ {total_saidas_geral:,.2f}")
+with col_meio_1: st.metric(label="Total de Entradas", value=f"R$ {total_entradas_geral:,.2f}")
+with col_meio_2: st.metric(label="Total de Saídas", value=f"R$ {total_saidas_geral:,.2f}")
 
 st.write("---")
 
 col_baixo_1, col_baixo_2 = st.columns(2)
-with col_baixo_1:
-    st.metric(label="Saldo (Gestão Atual)", value=f"R$ {saldo_gestao:,.2f}")
-with col_baixo_2:
-    st.metric(label="Saldo (Total)", value=f"R$ {saldo_total:,.2f}")
+with col_baixo_1: st.metric(label="Saldo (Gestão Atual)", value=f"R$ {saldo_gestao:,.2f}")
+with col_baixo_2: st.metric(label="Saldo (Total)", value=f"R$ {saldo_total:,.2f}")
 
 st.write("---")
 
@@ -95,7 +88,6 @@ st.write("")
 st.markdown(f"**Tabela de Movimentações - {mes_selecionado}**")
 
 if is_master:
-    # num_rows="dynamic" reativado para liberar o "+" no rodapé e poder repetir dias
     df_editado = st.data_editor(
         df_atual,
         hide_index=True,
@@ -113,45 +105,70 @@ if is_master:
     
     if not df_editado.equals(df_atual):
         df_editado["Dia"] = pd.to_numeric(df_editado["Dia"], errors='coerce')
-        # Organiza de forma crescente pelo dia automaticamente
         df_editado = df_editado.dropna(subset=["Dia"]).sort_values(by="Dia").reset_index(drop=True)
         st.session_state["dados_meses_financeiros"][mes_selecionado] = df_editado
-        try:
-            pickle.dump(st.session_state["dados_meses_financeiros"], open("backup_financas.pkl", "wb"))
-        except: pass
         st.rerun()
 else:
     st.dataframe(df_atual, hide_index=True, column_config={"Dia": "Dia", "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="%.2f"), "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="%.2f"), "Motivo": "Motivo/Descrição"}, use_container_width=True)
 
-# --- 3. RECURSO DE RELATÓRIO IMPRESSO COMPLETO ---
+st.write("---")
+
+# --- 3. CENTRAL DE BACKUP FINANCEIRO FIXO (IGUAL A DOS SÓCIOS) ---
+st.markdown("### 💾 Central de Backups do Caixa")
+col_fback_1, col_fback_2 = st.columns(2)
+
+with col_fback_1:
+    st.markdown("**Exportar Movimentações**")
+    # Compacta todo o dicionário de meses em um arquivo binário para download seguro
+    dados_exportar = {
+        "saldo_anterior": st.session_state["saldo_anterior_master"],
+        "meses": st.session_state["dados_meses_financeiros"]
+    }
+    buffer_pkl = pickle.dumps(dados_exportar)
+    st.download_button(
+        label="📥 Fazer Backup de Todo o Caixa (Formato .PKL)",
+        data=buffer_pkl,
+        file_name="backup_financas_aro.pkl",
+        mime="application/octet-stream",
+        use_container_width=True
+    )
+
+with col_fback_2:
+    if is_master:
+        st.markdown("**Importar Arquivo de Backup**")
+        arquivo_fin_enviado = st.file_uploader("Selecione o arquivo 'backup_financas_aro.pkl' para restaurar:", type=["pkl"])
+        if arquivo_fin_enviado is not None:
+            try:
+                dados_importados = pickle.load(arquivo_fin_enviado)
+                if "saldo_anterior" in dados_importados and "meses" in dados_importados:
+                    if st.button("🔄 Confirmar Restauração do Caixa", use_container_width=True, type="primary"):
+                        st.session_state["saldo_anterior_master"] = dados_importados["saldo_anterior"]
+                        st.session_state["dados_meses_financeiros"] = dados_importados["meses"]
+                        st.success("Todo o fluxo de caixa de 2026 a 2028 foi restaurado!")
+                        st.rerun()
+                else:
+                    st.error("⚠️ O arquivo enviado não é um backup financeiro válido da ARO.")
+            except:
+                st.error("Erro ao ler o arquivo binário de finanças.")
+
+# --- 4. RECURSO DE RELATÓRIO IMPRESSO COMPLETO ---
 if is_master:
     st.write("---")
     st.markdown("### 🖨️ Relatórios do Sistema")
-    
     if st.button("Gerar Relatório de Impressão Completo", use_container_width=True):
-        st.success("Relatório gerado com sucesso logo abaixo! Pressione Ctrl+P no seu teclado para imprimir ou salvar em PDF.")
+        st.success("Relatório gerado logo abaixo! Use Ctrl+P para salvar em PDF.")
         st.write("---")
-        
         st.markdown("<h2 style='text-align: center;'>🦅 RELATÓRIO FINANCEIRO INTEGRADO - ARO RIO DO SUL</h2>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center;'><b>Data de Emissão:</b> {datetime.date.today().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
-        st.write(f"**Saldo Anterior Geral:** R$ {saldo_anterior:,.2f}")
-        st.write(f"**Total Acumulado de Entradas:** R$ {total_entradas_geral:,.2f}")
-        st.write(f"**Total Acumulado de Saídas:** R$ {total_saidas_geral:,.2f}")
-        st.write(f"**Saldo Total de Caixa:** R$ {saldo_total:,.2f}")
+        st.write(f"**Saldo Anterior Geral:** R$ {saldo_anterior:,.2f} | **Total Entradas:** R$ {total_entradas_geral:,.2f} | **Total Saídas:** R$ {total_saidas_geral:,.2f} | **Saldo Total:** R$ {saldo_total:,.2f}")
         st.write("---")
-        
         for m in lista_meses:
             df_m = st.session_state["dados_meses_financeiros"][m]
             st.markdown(f"### 📅 Período: {m}")
             if df_m is not None and not df_m.empty:
-                # Filtrar linhas que possuem movimentações reais para economizar papel na impressão
                 df_filtro = df_m[(df_m["Entradas"] > 0) | (df_m["Saídas"] > 0) | (df_m["Motivo"].str.strip() != "")]
                 if not df_filtro.empty:
                     df_impressao = df_filtro.copy()
                     df_impressao["Dia"] = df_impressao["Dia"].astype(int)
                     df_impressao["Entradas (R$)"] = df_impressao["Entradas"].map(lambda x: f"R$ {float(x):,.2f}")
                     df_impressao["Saídas (R$)"] = df_impressao["Saídas"].map(lambda x: f"R$ {float(x):,.2f}")
-                    st.table(df_impressao[["Dia", "Entradas (R$)", "Saídas (R$)", "Motivo"]].rename(columns={"Motivo": "Motivo/Descrição"}))
-                else:
-                    st.caption("Sem movimentações registradas neste mês.")
-            st.markdown("<div style='page-break-after: always;'></div>", unsafe_allow_html=True)
+                    st.table(df_impressao[["Dia", "Entradas (R$)", "Saídas (R$)", "Motivo"]].rename(columns={"Motivo": "Descrição"}))
