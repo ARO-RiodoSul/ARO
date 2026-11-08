@@ -39,7 +39,7 @@ if not st.session_state["autenticado"]:
             elif u in ["Kleven", "Valter", "Peterson", "Mauro"] and s == {"Kleven": "12345678", "Valter": "021277", "Peterson": "100693", "Mauro": "120660"}[u]:
                 st.session_state.update({"autenticado": True, "user_role": "diretoria"})
                 st.rerun()
-            elif u == "Vanderlei" and s == "251073": # Senha do Vanderlei alterada para 251073
+            elif u == "Vanderlei" and s == "251073":
                 st.session_state.update({"autenticado": True, "user_role": "diretoria"})
                 st.rerun()
             elif u in usuarios_cadastrados and usuarios_cadastrados[u]["senha"] == s:
@@ -47,6 +47,13 @@ if not st.session_state["autenticado"]:
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
+                
+    # NOVO AJUSTE: Botão rápido para acesso público de visitantes sem exigir credenciais
+    st.write("<p style='text-align: center; color: gray; margin: 5px 0;'>Ou se você é apenas um visitante do evento:</p>", unsafe_allow_html=True)
+    if st.button("🌐 Entrar como Convidado / Visitante", use_container_width=True):
+        st.session_state.update({"autenticado": True, "user_role": "visitante"})
+        st.rerun()
+        
     st.stop()
 
 # --- SE ESTIVER AUTENTICADO ---
@@ -78,7 +85,7 @@ try:
 except: pass
 
 c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-if c_o.button("🔒 Sair do Panel", use_container_width=True):
+if c_o.button("🔒 Sair do Painel", use_container_width=True):
     st.session_state["autenticado"] = False
     st.rerun()
 
@@ -124,7 +131,7 @@ if role == "master":
                     elif tipo_role == "Sócio" and socio_vinc == "Selecione o Sócio...":
                         st.error("Selecione qual sócio oficial será vinculado a este login!")
                     else:
-                        st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {"senha": novo_s.strip(), "role": "socio" if tipo_role == "Sócio" else "visitante", "socio_vinculado": socio_vinc}
+                        st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {"senha": noise_s.strip() if 'noise_s' in locals() else novo_s.strip(), "role": "socio" if tipo_role == "Sócio" else "visitante", "socio_vinculado": socio_vinc}
                         try:
                             with open("./backup_usuarios.pkl", "wb") as f: pickle.dump(st.session_state["banco_usuarios_dinamicos"], f)
                             st.success("Usuário salvo com sucesso!")
