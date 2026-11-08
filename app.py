@@ -5,43 +5,25 @@ import os, pickle
 # CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
 
-# FORÇAR CONFIGURAÇÕES VISUAIS SEGUIRAM O PADRÃO
+# FORÇAR CONFIGURAÇÃO DE LOGO NO CELULAR
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"><meta name="apple-mobile-web-app-title" content="ARO"><meta name="application-name" content="ARO"></head>""", unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
-# --- TELA DE LOGIN PROTEGIDA ---
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    try:
-        if os.path.exists("logo.png"):
-            _, col_l2, _ = st.columns(3)
-            col_l2.image("logo.png", use_container_width=True)
-        else:
-            st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-    except:
-        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-        
-    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"): st.columns(3).image("logo.png", use_container_width=True)
+    else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
+        u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
-            # Ajuste de segurança que remove espaços extras acidentais nas pontas
-            u_limpo = u.strip()
-            s_limpo = s.strip()
-            
-            if u_limpo == "Junior Rebelo" and s_limpo == "270688":
-                st.session_state.update({"autenticado": True, "user_role": "master"})
-                st.rerun()
-            elif u_limpo == "Kleven" and s_limpo == "12345678":
-                st.session_state.update({"autenticado": True, "user_role": "leitor"})
-                st.rerun()
-            else:
-                st.error("Usuário ou senha incorretos. Verifique as letras maiúsculas.")
+            if u == "Junior Rebelo" and s == "270688": st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
+            elif u == "Kleven" and s == "12345678": st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
+            else: st.error("Incorreto.")
     st.stop()
 
+# --- CARREGAMENTO DE BANCOS DE DADOS E BACKUPS ---
 if "dados_socios_internos" not in st.session_state:
     if os.path.exists("backup_socios.csv"): st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv")
     else: st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
@@ -55,6 +37,10 @@ if "saldo_anterior_master" not in st.session_state:
 
 if "dados_meses_financeiros" not in st.session_state:
     st.session_state["dados_meses_financeiros"] = pickle.load(open("backup_financas.pkl", "rb")) if os.path.exists("backup_financas.pkl") else {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
+
+# MEMÓRIA PERMANENTE DO NOVO MÓDULO DE TORNEIOS
+if "dados_torneios_internos" not in st.session_state:
+    st.session_state["dados_torneios_internos"] = pickle.load(open("backup_torneios.pkl", "rb")) if os.path.exists("backup_torneios.pkl") else pd.DataFrame(columns=["Torneio / Etapa", "ID Sócio", "Nome do Atleta", "Anilha da Ave", "Valor Inscrição", "Status Pagamento"])
 
 t_ent = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Entradas"], errors='coerce').sum() for m in lista_meses)
 t_sai = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Saídas"], errors='coerce').sum() for m in lista_meses)
@@ -72,6 +58,7 @@ def gerar_relatorio_texto():
         txt += f"TOTAL ENTRADAS: R$ {df_m_p['Entradas'].sum():.2f} | TOTAL SAÍDAS: R$ {df_m_p['Saídas'].sum():.2f}\n\n"
     return txt + f" FECHAMENTO CONSOLIDADO \nSaldo Anterior: R$ {st.session_state['saldo_anterior_master']:.2f}\nEntradas: R$ {t_ent:.2f}\nSaídas: R$ {t_sai:.2f}\nGestão: R$ {s_ges:.2f}\nTotal: R$ {s_tot:.2f}\n"
 
+# --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
     c_l, c_t, c_o = st.columns(3)
     try:
@@ -80,10 +67,14 @@ if st.session_state["tela_atual"] == "menu":
     c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     if c_o.button("🔒 Sair"): st.session_state["autenticado"] = False; st.rerun()
     st.markdown("---")
-    cb1, cb2 = st.columns(2)
+    st.info("⭐ Acesso Master" if st.session_state["user_role"] == "master" else "ℹ️ Acesso de Consulta (Apenas Leitura)")
+    
+    cb1, cb2, cb3 = st.columns(3)
     if cb1.button("👥 Sócios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "socios"; st.rerun()
     if cb2.button("🪙 Finanças", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "caixa"; st.rerun()
+    if cb3.button("🏆 Torneios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "torneios"; st.rerun()
 
+# --- TELA 2: SÓCIOS ---
 elif st.session_state["tela_atual"] == "socios":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("👥 Controle de Sócios")
@@ -99,6 +90,7 @@ elif st.session_state["tela_atual"] == "socios":
             st.session_state["dados_socios_internos"].to_csv("backup_socios.csv", index=False); st.rerun()
     else: st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
 
+# --- TELA 3: FINANÇAS ---
 elif st.session_state["tela_atual"] == "caixa":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("🪙 Controle Financeiro - Finanças")
@@ -137,5 +129,3 @@ elif st.session_state["tela_atual"] == "caixa":
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
                     pickle.dump(st.session_state["dados_meses_financeiros"], open("backup_financas.pkl", "wb"))
                     st.toast("💾 Salvo!"); st.rerun()
-    else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
-    st.markdown("---")
