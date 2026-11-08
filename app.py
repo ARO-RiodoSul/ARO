@@ -2,12 +2,11 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
-# CONFIGURAÇÃO OFICIAL DO APP E ÍCONE DO NAVEGADOR
-st.set_page_config(
-    page_title="ARO", 
-    page_icon="logo.png" if os.path.exists("logo.png") else "📊", 
-    layout="wide"
-)
+# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
+st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
+
+# FORÇAR CONFIGURAÇÕES VISUAIS SEGUIRAM O PADRÃO
+st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"><meta name="apple-mobile-web-app-title" content="ARO"><meta name="application-name" content="ARO"></head>""", unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
@@ -29,9 +28,18 @@ if not st.session_state["autenticado"]:
         u = st.text_input("Usuário")
         s = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
-            if u == "Junior Rebelo" and s == "270688": st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
-            elif u == "Kleven" and s == "12345678": st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
-            else: st.error("Incorreto.")
+            # Ajuste de segurança que remove espaços extras acidentais nas pontas
+            u_limpo = u.strip()
+            s_limpo = s.strip()
+            
+            if u_limpo == "Junior Rebelo" and s_limpo == "270688":
+                st.session_state.update({"autenticado": True, "user_role": "master"})
+                st.rerun()
+            elif u_limpo == "Kleven" and s_limpo == "12345678":
+                st.session_state.update({"autenticado": True, "user_role": "leitor"})
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos. Verifique as letras maiúsculas.")
     st.stop()
 
 if "dados_socios_internos" not in st.session_state:
@@ -131,6 +139,3 @@ elif st.session_state["tela_atual"] == "caixa":
                     st.toast("💾 Salvo!"); st.rerun()
     else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
     st.markdown("---")
-    m_e = pd.to_numeric(df_m_at["Entradas"], errors='coerce').sum()
-    m_s = pd.to_numeric(df_m_at["Saídas"], errors='coerce').sum()
-    st.write(f"📊 **Mês Atual - Entradas:** R$ {m_e:,.2f} | **Saídas:** R$ {m_s:,.2f} | **Líquido:** R$ {(m_e - m_s):,.2f}")
