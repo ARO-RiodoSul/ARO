@@ -5,7 +5,7 @@ import os
 # CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="📊", layout="wide")
 
-# --- SISTEMA DE LOGIN DE SEGURANÇA E NÍVEL DE ACESSO ---
+# --- SISTEMA DE LOGIN DE SEGURANÇA ---
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 if "user_role" not in st.session_state:
@@ -14,7 +14,7 @@ if "user_role" not in st.session_state:
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
-        col_logo_esq, col_logo_meio, col_logo_dir = st.columns(3)
+        _, col_logo_meio, _ = st.columns(3)
         col_logo_meio.image("logo.png", use_container_width=True)
     else:
         st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
@@ -24,74 +24,58 @@ if not st.session_state["autenticado"]:
     with st.form("tela_login"):
         usuario = st.text_input("Usuário", placeholder="Digite seu usuário...")
         senha = st.text_input("Senha de Acesso", type="password", placeholder="Digite sua senha...")
-        botao_entrar = st.form_submit_button("Entrar no Sistema")
-        if botao_entrar:
+        if st.form_submit_button("Entrar no Sistema"):
             if usuario == "Junior Rebelo" and senha == "270688":
-                st.session_state["autenticado"] = True
-                st.session_state["user_role"] = "master"
-                st.success("Acesso Master autorizado! Carregando...")
+                st.session_state["autenticado"], st.session_state["user_role"] = True, "master"
+                st.rerun()
+            elif usuario == "Kleven" and senha == "12345678":
+                st.session_state["autenticado"], st.session_state["user_role"] = True, "leitor"
                 st.rerun()
             else:
-                st.error("Usuário ou senha incorretos. Tente novamente.")
+                st.error("Usuário ou senha incorretos.")
     st.stop()
 
 # ==============================================================================
-# PAINEL INTERNO ARO RIO DO SUL
+# PAINEL INTERNO (APÓS LOGIN)
 # ==============================================================================
 if "tela_atual" not in st.session_state:
     st.session_state["tela_atual"] = "menu"
 
-# 1. INICIALIZAÇÃO DA MEMÓRIA DOS SÓCIOS
+# 1. MEMÓRIA DOS SÓCIOS (1 A 100)
 if "dados_socios_internos" not in st.session_state:
-    linhas_socios = [{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)]
-    st.session_state["dados_socios_internos"] = pd.DataFrame(linhas_socios)
+    st.session_state["dados_socios_internos"] = pd.DataFrame([
+        {"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)
+    ])
 
 # 2. LISTA DE MESES (DEZ 2026 - DEZ 2028)
-anos = [2026, 2027, 2028]
-meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-lista_meses_completa = []
-for ano in anos:
-    for m_idx, nome_m in enumerate(meses_nomes):
-        if ano == 2026 and m_idx != 11:  # Começa estritamente em Dezembro de 2026
-            continue
-        lista_meses_completa.append(f"{nome_m} {ano}")
+lista_meses_completa = ["Dezembro 2026"] + [f"{m} {a}" for a in [2027, 2028] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
-# 3. INICIALIZAÇÃO DO BANCO DE DADOS DE MESES FINANCEIROS
+# 3. BANCO DE DADOS FINANCEIRO INTERNO
 if "saldo_anterior_master" not in st.session_state:
     st.session_state["saldo_anterior_master"] = 0.0
 
 if "dados_meses_financeiros" not in st.session_state:
-    st.session_state["dados_meses_financeiros"] = {}
-    for mes_ref in lista_meses_completa:
-        linhas_mes = [{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]
-        st.session_state["dados_meses_financeiros"][mes_ref] = pd.DataFrame(linhas_mes)
+    st.session_state["dados_meses_financeiros"] = {
+        m_ref: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m_ref in lista_meses_completa
+    }
 
-# --- MATEMÁTICA FINANCEIRA GLOBAL EM TEMPO REAL ---
-total_entradas_global = 0.0
-total_saidas_global = 0.0
-
-for m_ref in lista_meses_completa:
-    df_m = st.session_state["dados_meses_financeiros"][m_ref]
-    total_entradas_global += pd.to_numeric(df_m["Entradas"], errors='coerce').sum()
-    total_saidas_global += pd.to_numeric(df_m["Saídas"], errors='coerce').sum()
-
+# MATEMÁTICA FINANCEIRA GLOBAL
+total_entradas_global = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Entradas"], errors='coerce').sum() for m in lista_meses_completa)
+total_saidas_global = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Saídas"], errors='coerce').sum() for m in lista_meses_completa)
 saldo_gestao_atual = total_entradas_global - total_saidas_global
 saldo_total_global = total_entradas_global + st.session_state["saldo_anterior_master"] - total_saidas_global
 
 # --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
-    col_logo, col_titulo, col_logout = st.columns(3)
-    if os.path.exists("logo.png"):
-        col_logo.image("logo.png", width=80)
+    col_logo, col_titulo, col_logout = st.columns([1, 4, 1])
+    if os.path.exists("logo.png"): col_logo.image("logo.png", width=80)
     col_titulo.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-    if col_logout.button("🔒 Sair do App"):
+    if col_logout.button("🔒 Sair"):
         st.session_state["autenticado"] = False
-        st.session_state["user_role"] = "user"
         st.rerun()
         
     st.markdown("---")
-    st.markdown("<h3 style='text-align: center;'>Selecione o módulo de gerenciamento:</h3>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.info("⭐ Acesso Master" if st.session_state["user_role"] == "master" else "ℹ️ Acesso de Consulta (Apenas Leitura)")
     
     col_btn_socios, col_btn_caixa = st.columns(2)
     with col_btn_socios:
@@ -113,8 +97,7 @@ elif st.session_state["tela_atual"] == "socios":
     st.title("👥 Controle de Sócios")
     st.markdown("---")
     if st.session_state["user_role"] == "master":
-        df_modificado = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"], required=True)}, hide_index=True, key="editor_socios_aro")
-        st.session_state["dados_socios_internos"] = df_modificado
+        st.session_state["dados_socios_internos"] = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"], required=True)}, hide_index=True)
     else:
         st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
 
@@ -127,68 +110,65 @@ elif st.session_state["tela_atual"] == "caixa":
     st.title("🪙 Controle Financeiro - Finanças")
     st.markdown("---")
     
-    # === REESTRUTURAÇÃO DO LAYOUT DOS INDICADORES ===
-    
-    # 1. Topo: Saldo Anterior (Sozinho em cima)
-    col_anterior_esq, col_anterior_meio, col_anterior_dir = st.columns([1, 2, 1])
+    # 1. Topo: Saldo Anterior
+    _, col_anterior_meio, _ = st.columns([1, 2, 1])
     with col_anterior_meio:
         st.markdown("<h3 style='text-align: center;'>🏦 Saldo Anterior</h3>", unsafe_allow_html=True)
         if st.session_state["user_role"] == "master":
-            st.session_state["saldo_anterior_master"] = st.number_input("Editar Valor (R$)", value=st.session_state["saldo_anterior_master"], step=50.0, format="%.2f", label_visibility="collapsed")
+            st.session_state["saldo_anterior_master"] = st.number_input("Editar Valor", value=st.session_state["saldo_anterior_master"], step=50.0, format="%.2f", label_visibility="collapsed")
         else:
-            st.markdown(f"<h4 style='text-align: center;'>R$ {st.session_state['saldo_anterior_master']:,.2f}</h4>", unsafe_allow_html=True)
+            st.markdown(f"<h4 style='text-align: center; color: #1E3A8A;'>R$ {st.session_state['saldo_anterior_master']:,.2f}</h4>", unsafe_allow_html=True)
             
+    # 2. Meio e Base: Métricas Financeiras
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    # 2. Meio: Total de Entradas e Total de Saídas (Lado a lado embaixo do Saldo Anterior)
-    col_meio_1, col_meio_2 = st.columns(2)
-    col_meio_1.metric(label="🟢 Total de Entradas", value=f"R$ {total_entradas_global:,.2f}")
-    col_meio_2.metric(label="🔴 Total de Saídas", value=f"R$ {total_saidas_global:,.2f}")
+    c_m1, c_m2 = st.columns(2)
+    c_m1.metric("🟢 Total de Entradas", f"R$ {total_entradas_global:,.2f}")
+    c_m2.metric("🔴 Total de Saídas", f"R$ {total_saidas_global:,.2f}")
     
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    # 3. Base: Os dois ícones de Saldo (Lado a lado no final do bloco de métricas)
-    col_base_1, col_base_2 = st.columns(2)
-    col_base_1.metric(label="📊 Saldo (Gestão Atual)", value=f"R$ {saldo_gestao_atual:,.2f}")
-    col_base_2.metric(label="💰 Saldo (Total)", value=f"R$ {saldo_total_global:,.2f}")
-    
+    c_b1, c_b2 = st.columns(2)
+    c_b1.metric("📊 Saldo (Gestão Atual)", f"R$ {saldo_gestao_atual:,.2f}")
+    c_b2.metric("💰 Saldo (Total)", f"R$ {saldo_total_global:,.2f}")
     st.markdown("---")
     
-    # NAVEGAÇÃO DOS MESES
-    st.subheader("📅 Selecione o Mês de Trabalho")
-    mes_selecionado = st.selectbox("Escolha o período:", lista_meses_completa, index=0)
-    
+    # Seleção de Meses e Lançamentos
+    mes_selecionado = st.selectbox("📅 Selecione o Mês de Trabalho:", lista_meses_completa)
     st.markdown(f"### 🗓️ Lançamentos Diários: {mes_selecionado}")
     
     df_mes_ativo = st.session_state["dados_meses_financeiros"][mes_selecionado]
     
     if st.session_state["user_role"] == "master":
-        st.success("📝 Modo Master Ativo: Edite os valores diretamente na tabela. Para criar linhas extras no mesmo dia, use o botão azul embaixo.")
-        
         df_mes_editado = st.data_editor(
-            df_mes_ativo,
-            use_container_width=True,
+            df_mes_ativo, use_container_width=True, num_rows="dynamic", hide_index=True,
             column_config={
-                "Dia": st.column_config.NumberColumn("Dia", disabled=False),
+                "Dia": st.column_config.NumberColumn("Dia"),
                 "Entradas": st.column_config.NumberColumn("Entradas (R$)", min_value=0.0, format="%.2f"),
                 "Saídas": st.column_config.NumberColumn("Saídas (R$)", min_value=0.0, format="%.2f"),
                 "Motivo": st.column_config.TextColumn("Motivo / Descrição")
-            },
-            num_rows="dynamic",
-            hide_index=True,
-            key=f"editor_financeiro_{mes_selecionado}"
+            }
         )
         st.session_state["dados_meses_financeiros"][mes_selecionado] = df_mes_editado
         
-        # Inserir múltiplos lançamentos por dia
-        with st.expander("➕ Inserir Múltiplos Lançamentos por Dia"):
-            with st.form(f"form_extra_{mes_selecionado}", clear_on_submit=True):
-                c_dia, c_ent, c_sai, c_mot = st.columns(4)
-                d_ex = c_dia.number_input("Dia", min_value=1, max_value=31, step=1, value=1)
-                e_ex = c_ent.number_input("Entrada (R$)", min_value=0.0, step=10.0, format="%.2f")
-                s_ex = c_sai.number_input("Saída (R$)", min_value=0.0, step=10.0, format="%.2f")
-                m_ex = c_mot.text_input("Motivo")
-                bt_inserir_extra = st.form_submit_button("Adicionar Registro ao Mês")
-                
-                if bt_inserir_extra and (e_ex > 0 or s_ex > 0):
-                    nova_linha_diaria = pd.DataFrame([{"Dia": d_ex, "Entradas": e_ex, "Saídas": s_ex, "Motivo": m_ex}])
+        with st.expander("➕ Criar Linha Dupla / Extra para o mesmo Dia"):
+            with st.form(f"f_ex_{mes_selecionado}", clear_on_submit=True):
+                c_d, c_e, c_s, c_m = st.columns(4)
+                d_ex = c_d.number_input("Dia", min_value=1, max_value=31, value=1)
+                e_ex = c_e.number_input("Entrada (R$)", min_value=0.0, format="%.2f")
+                s_ex = c_s.number_input("Saída (R$)", min_value=0.0, format="%.2f")
+                m_ex = c_m.text_input("Motivo")
+                if st.form_submit_button("Inserir Linha Extra") and (e_ex > 0 or s_ex > 0):
+                    st.session_state["dados_meses_financeiros"][mes_selecionado] = pd.concat([df_mes_editado, pd.DataFrame([{"Dia": d_ex, "Entradas": e_ex, "Saídas": s_ex, "Motivo": m_ex}])], ignore_index=True)
+                    st.slots = st.success("Linha adicionada!")
+                    st.rerun()
+    else:
+        st.dataframe(df_mes_ativo, use_container_width=True, hide_index=True)
+
+    # Fechamento e Somas do Mês Selecionado
+    st.markdown("---")
+    m_ent = pd.to_numeric(df_mes_ativo["Entradas"], errors='coerce').sum()
+    m_sai = pd.to_numeric(df_mes_ativo["Saídas"], errors='coerce').sum()
+    
+    col_t1, col_t2, col_t3 = st.columns(3)
+    col_t1.markdown(f"📊 **Total Entradas do Mês:** R$ {m_ent:,.2f}")
+    col_t2.markdown(f"📊 **Total Saídas do Mês:** R$ {m_sai:,.2f}")
+    col_t3.markdown(f"📉 **Saldo Líquido do Mês:** R$ {(m_ent - m_sai):,.2f}")
