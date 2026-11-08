@@ -12,9 +12,18 @@ st.title("🦅 Gestão de Torneios - ARO Rio do Sul")
 # Validar nível de acesso
 is_master = st.session_state.get("user_role") == "master"
 
-# Sincronização automática com a data definida na página inicial (app.py)
-if "data_torneio_aro" not in st.session_state:
+# Sincronização e correção automática da data guardada no session_state
+if "data_torneio_aro" not in st.session_state or st.session_state["data_torneio_aro"] is None:
     st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
+elif isinstance(st.session_state["data_torneio_aro"], str):
+    # CORREÇÃO CHAVE: Se a data veio como texto do app.py, transforma de volta em Objeto de Data real
+    try:
+        st.session_state["data_torneio_aro"] = datetime.datetime.strptime(st.session_state["data_torneio_aro"], "%Y-%m-%d").date()
+    except ValueError:
+        try:
+            st.session_state["data_torneio_aro"] = datetime.datetime.strptime(st.session_state["data_torneio_aro"], "%d/%m/%Y").date()
+        except ValueError:
+            st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
 
 # Inicializar banco de inscrições no session_state se não existir
 if "torneio_inscricoes_aro" not in st.session_state:
@@ -24,8 +33,9 @@ if "torneio_inscricoes_aro" not in st.session_state:
 
 df_inscritos = st.session_state["torneio_inscricoes_aro"]
 
-# --- 1. CABEÇALHO COM DATA ---
-st.markdown(f"### 📅 Torneio Dia: **{st.session_state['data_torneio_aro'].strftime('%d/%m/%Y')}**")
+# --- 1. CABEÇALHO COM DATA SEGURA ---
+data_formatada = st.session_state["data_torneio_aro"].strftime('%d/%m/%Y')
+st.markdown(f"### 📅 Torneio Dia: **{data_formatada}**")
 st.caption("A data do torneio acima é alterada exclusivamente na página inicial (app.py) pelo usuário Master.")
 
 st.write("---")
@@ -93,7 +103,6 @@ if is_master:
                 if estacas_livres:
                     estaca_sorteada = random.choice(estacas_livres)
                 else:
-                    # Se estourar os números aleatórios, pega o maior número existente da espécie + 1
                     if estacas_ocupadas:
                         estaca_sorteada = max(estacas_ocupadas) + 1
                     else:
@@ -143,4 +152,3 @@ for i, esp in enumerate(especies_validas):
                 },
                 use_container_width=True
             )
-
