@@ -97,10 +97,14 @@ total_entradas_mes = pd.to_numeric(df_atual["Entradas"], errors='coerce').fillna
 total_saidas_mes = pd.to_numeric(df_atual["Saídas"], errors='coerce').fillna(0).sum() if not df_atual.empty else 0.0
 saldo_mes = total_entradas_mes - total_saidas_mes
 
-col_mes_totais = st.columns(3)
-col_mes_totais.metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
-col_mes_totais.metric("Saídas do Mês", f"R$ {total_saidas_mes:,.2f}")
-col_mes_totais.metric("Balanço do Mês", f"R$ {saldo_mes:,.2f}")
+# CORREÇÃO DAQUI: Desempacotando as colunas de totais mensais corretamente
+col_mes_1, col_mes_2, col_mes_3 = st.columns(3)
+with col_mes_1:
+    st.metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
+with col_mes_2:
+    st.metric("Saídas do Mês", f"R$ {total_saidas_mes:,.2f}")
+with col_mes_3:
+    st.metric("Balanço do Mês", f"R$ {saldo_mes:,.2f}")
 
 st.write("")
 st.markdown(f"**Tabela de Movimentações - {mes_selecionado}**")
@@ -123,7 +127,6 @@ if is_master:
     
     # Se houver mudanças, aplica a ordenação automática pelo Dia antes de salvar
     if not df_editado.equals(df_atual):
-        # CORREÇÃO: Transforma a coluna em número e ordena de forma crescente
         df_editado["Dia"] = pd.to_numeric(df_editado["Dia"], errors='coerce')
         df_editado = df_editado.dropna(subset=["Dia"]).sort_values(by="Dia").reset_index(drop=True)
         
