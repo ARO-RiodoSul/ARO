@@ -23,6 +23,7 @@ socio_vinculado = "Administração" if is_admin else usuarios_dinamicos.get(st.s
 
 ARQUIVO_CONFIRMADOS = "inscricoes_confirmadas.pkl"
 ARQUIVO_PENDENTES = "inscricoes_pendentes.pkl"
+ARQUIVO_CONFIG = "config_torneio.pkl"  # NOVO: Arquivo físico para travar a data global
 
 def carregar_dados_fisicos():
     if os.path.exists(ARQUIVO_CONFIRMADOS):
@@ -37,16 +38,23 @@ def carregar_dados_fisicos():
     else:
         st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
 
+    # NOVO: Carrega a data global salva pelo Master
+    if os.path.exists(ARQUIVO_CONFIG):
+        with open(ARQUIVO_CONFIG, "rb") as f:
+            st.session_state["data_torneio_aro"] = pickle.load(f)
+    else:
+        st.session_state["data_torneio_aro"] = datetime.date(2026, 11, 8)
+
 def salvar_dados_fisicos():
     with open(ARQUIVO_CONFIRMADOS, "wb") as f:
         pickle.dump(st.session_state["dados_torneios_internos"], f)
     with open(ARQUIVO_PENDENTES, "wb") as f:
         pickle.dump(st.session_state["inscricoes_pendentes_aro"], f)
+    # NOVO: Salva a data global de forma persistente no disco
+    with open(ARQUIVO_CONFIG, "wb") as f:
+        pickle.dump(st.session_state["data_torneio_aro"], f)
 
 carregar_dados_fisicos()
-
-if "data_torneio_aro" not in st.session_state:
-    st.session_state["data_torneio_aro"] = datetime.date(2026, 11, 8)
 
 especies_validas = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
 
@@ -54,6 +62,7 @@ if is_admin:
     nova_data = st.date_input("📅 Data do Torneio:", value=st.session_state["data_torneio_aro"], format="DD/MM/YYYY")
     if nova_data != st.session_state["data_torneio_aro"]:
         st.session_state["data_torneio_aro"] = nova_data
+        salvar_dados_fisicos()  # Grava a nova data no arquivo imediatamente
         st.rerun()
 else:
     st.markdown(f"### 📅 Torneio Dia: {st.session_state['data_torneio_aro'].strftime('%d/%m/%Y')}")
@@ -72,7 +81,7 @@ if is_admin:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
     if df_pendentes_atual.empty:
-        st.caption("Nenhuma solicitudade pendente no momento.")
+        st.caption("Nenhuma solicitação pendente no momento.")
     else:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
@@ -101,7 +110,6 @@ if is_admin:
                     salvar_dados_fisicos()
                     st.warning("Recusada!")
                     st.rerun()
-
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
 lista_status = []
@@ -163,7 +171,6 @@ for i, esp in enumerate(especies_validas):
         else: 
             st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
-# --- FUNÇÃO DO PDF COM FONTE GRANDE, CLUBE E LAYOUT PREENCHIDO (10x7cm em A4) ---
 def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
     buf = io.BytesIO()
     canvas_obj = canvas.Canvas(buf, pagesize=A4)
@@ -179,38 +186,26 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
         x = m_x + (col * f_w)
         y = m_y + (lin * f_h)
         
-        # Define se exibe ARO ou Outro na ficha
         clube_ficha = "ARO" if str(r.get("Clube", "")).upper() == "ARO" else "Outro"
         v_str = "R$ 25,00" if clube_ficha == "ARO" else "R$ 35,00"
         est_str = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
         
-        # Borda externa da etiqueta
         canvas_obj.setStrokeColor(colors.black)
         canvas_obj.setLineWidth(1)
         canvas_obj.rect(x, y, f_w, f_h, stroke=1, fill=0)
-        
-        # Linha cabeçalho
         canvas_obj.line(x, y + 5.3*cm, x + f_w, y + 5.3*cm)
-        
-        # --- TEXTOS COM FONTES GRANDES E BEM PREENCHIDOS ---
         canvas_obj.setFont("Helvetica-Bold", 14)
         canvas_obj.drawCentredString(x + 5.0*cm, y + 5.8*cm, "ARO - RIO DO SUL")
-        
         canvas_obj.setFont("Helvetica-Bold", 11)
         canvas_obj.drawString(x + 0.4*cm, y + 4.5*cm, f"DATA: {data_str}")
-        
         canvas_obj.setFont("Helvetica-Bold", 13)
         canvas_obj.drawString(x + 5.8*cm, y + 4.5*cm, f"ESTACA: {est_str}")
-        
         canvas_obj.setFont("Helvetica-Bold", 10)
         canvas_obj.drawString(x + 0.4*cm, y + 3.5*cm, f"PROPRIETÁRIO: {str(r['Proprietário']).upper()[:32]}")
         canvas_obj.drawString(x + 0.4*cm, y + 2.6*cm, f"AVE: {str(r['Nome da Ave']).upper()[:22]}")
         canvas_obj.drawString(x + 0.4*cm, y + 1.8*cm, f"ESPÉCIE: {str(r['Espécie']).upper()}")
-        
-        # Exibição clara da afiliação do clube
         canvas_obj.drawString(x + 0.4*cm, y + 1.0*cm, f"CLUBE: {clube_ficha}")
         canvas_obj.drawString(x + 0.4*cm, y + 0.3*cm, f"ANILHA: {str(r['Anilha']).upper()}")
-        
         canvas_obj.setFont("Helvetica-Bold", 12)
         canvas_obj.drawString(x + 5.8*cm, y + 0.3*cm, f"VALOR: {v_str}")
         
@@ -237,8 +232,9 @@ if role_atual == "master":
             if st.button("💥 EXCLUIR TORNEIO TODO (ZERAR)", use_container_width=True, type="primary"):
                 st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
                 st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
+                st.session_state["data_torneio_aro"] = datetime.date(2026, 11, 15)  # Novo: Padrão joga para o próximo domingo automaticamente
                 salvar_dados_fisicos()
-                st.success("Torneio excluído com sucesso!")
+                st.success("Torneio excluído com sucesso e data resetada!")
                 st.rerun()
 
     st.write("---")
