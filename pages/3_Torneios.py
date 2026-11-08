@@ -2,11 +2,10 @@ import streamlit as st
 import pandas as pd
 import datetime, random, io, pickle, os
 
-# Importações para a geração correta do PDF de fichas agrupadas em folha A4
+# Importações nativas do ReportLab para desenhar o PDF em A4 sem erros
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 
 st.set_page_config(page_title="Torneios - ARO", page_icon="🦅", layout="wide")
@@ -71,6 +70,7 @@ for i, esp in enumerate(especies_validas):
     cols[i].metric(label=esp, value=str(contagem[esp]))
 st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
+# --- FILA DE APROVAÇÃO ---
 if is_admin:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
@@ -79,7 +79,7 @@ if is_admin:
     else:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
-                c_inf, c_b1, c_b2 = st.columns()
+                c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
                 c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
                 
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
@@ -106,6 +106,7 @@ if is_admin:
                     st.warning("Inscrição recusada!")
                     st.rerun()
 
+# --- SEÇÃO: MINHAS INSCRIÇÕES (ACOMPANHAMENTO DO SÓCIO) ---
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
 lista_status = []
@@ -125,6 +126,7 @@ if len(lista_status) == 0:
 else:
     st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
+# --- FORMULÁRIO DE INSCRIÇÃO ---
 st.write("---")
 st.markdown("### 📝 Solicitar Inscrição de Ave")
 df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
@@ -156,6 +158,7 @@ else:
             st.success("🎯 Solicitado com sucesso! Verifique a tabela acima.")
             st.rerun()
 
+# --- CONFIRMADOS EM ABAS ---
 st.write("---")
 st.markdown("### 🏆 Competidores Confirmados por Categoria")
 abas = st.tabs(especies_validas)
@@ -167,23 +170,34 @@ for i, esp in enumerate(especies_validas):
         else: 
             st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
-def gerar_pdf_fichas_a4(df_inscritos, data_torneio):
+# --- FUNÇÃO DO CANVAS PARA PARSER EM FOLHA A4 (2 COLUNAS X 4 LINHAS) ---
+def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1*cm, rightMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm)
-    styles = getSampleStyleSheet()
-    style_tit = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=10, leading=11, alignment=1)
-    style_txt = ParagraphStyle('X', fontName='Helvetica', fontSize=8, leading=10)
-    style_bold = ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=8, leading=10)
-    
-    elementos = []
+    c = canvas.Canvas(buf, pagesize=A4)
     data_str = data_torneio.strftime('%d/%m/%Y')
-    lista_tabelas = []
     
+    margem_x = 0.5 * cm
+    margem_y = 0.8 * cm
+    ficha_w = 10.0 * cm
+    ficha_h = 7.0 * cm
+    
+    contador = 0
     for _, r in df_inscritos.iterrows():
-        val = "R$ 25,00" if str(r.get("Clube", "")).upper() == "ARO" else "R$ 35,00"
-        est = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
+        pos_pagina = contador % 8
+        if pos_pagina == 0 and contador > 0:
+            c.showPage()
+            
+        col = pos_pagina % 2
+        lin = 3 - (pos_pagina // 2)
         
-        dados_ficha = [
-            [Paragraph("**ARO - Rio do Sul**", style_tit), ""],
-            [Paragraph(f"**Data:** {data_str}", style_txt), Paragraph(f"**Estaca:** {est}", style_bold)],
-            [Paragraph(f"**Proprietário:** {r['Proprietário']}", style_txt), ""],
+        x = margem_x + (col * ficha_w)
+        y = margem_y + (lin * ficha_h)
+        
+        valor_str = "R$ 25,00" if str(r.get("Clube", "")).upper() == "ARO" else "R$ 35,00"
+        estaca_str = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
+        
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(1)
+        c.rect(x, y, ficha_w, ficha_h, stroke=1, fill=0)
+        
+        c.setLineWidth(0.5)
