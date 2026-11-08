@@ -8,8 +8,8 @@ st.set_page_config(page_title="Finanças - Painel ARO", page_icon="💰", layout
 # Título do Módulo
 st.title("💰 Fluxo de Caixa - ARO Rio do Sul")
 
-# Validar se o usuário é Master para liberar a edição
-is_master = st.session_state.get("username") == "Junior Rebelo"
+# AJUSTE NA VALIDAÇÃO: Valida diretamente pela função/role atribuída no app.py
+is_master = st.session_state.get("user_role") == "master"
 
 # Inicializar dados financeiros no session_state se não existirem
 if "financas_data" not in st.session_state:
@@ -53,10 +53,10 @@ saldo_anterior = st.session_state["financas_data"]["saldo_anterior"]
 saldo_gestao = total_entradas_geral - total_saidas_geral
 saldo_total = saldo_anterior + saldo_gestao
 
-# --- 1. MENU PRINCIPAL (Layout Solicitado por Você) ---
+# --- 1. MENU PRINCIPAL ---
 st.markdown("### 📊 Resumo Consolidado Geral")
 
-# Saldo Anterior no topo - Editável APENAS pelo Junior Rebelo (Master)
+# Saldo Anterior no topo - Agora validando com a role 'master' com total segurança
 with st.container():
     if is_master:
         novo_saldo_anterior = st.number_input("Saldo Anterior (R$)", value=float(saldo_anterior), step=100.0, key="edit_saldo_ant")
@@ -68,7 +68,7 @@ with st.container():
 
 st.write("---")
 
-# CORREÇÃO: Desempacotando as colunas do meio de forma correta
+# Total de Entradas e Saídas abaixo
 col_meio_1, col_meio_2 = st.columns(2)
 with col_meio_1:
     st.metric(label="Total de Entradas", value=f"R$ {total_entradas_geral:,.2f}")
@@ -77,7 +77,7 @@ with col_meio_2:
 
 st.write("---")
 
-# CORREÇÃO: Desempacotando as colunas de baixo de forma correta
+# Saldos da Gestão e Total embaixo
 col_baixo_1, col_baixo_2 = st.columns(2)
 with col_baixo_1:
     st.metric(label="Saldo (Gestão Atual)", value=f"R$ {saldo_gestao:,.2f}")
@@ -106,7 +106,7 @@ st.write("")
 st.markdown(f"**Tabela de Movimentações - {mes_selecionado}**")
 
 if is_master:
-    # num_rows="dynamic" permite clicar em "+" no rodapé e adicionar linhas livres, repetindo o dia se necessário
+    # num_rows="dynamic" permite clicar em "+" no rodapé para adicionar linhas livres e dobrar lançamentos diários
     df_editado = st.data_editor(
         df_atual,
         hide_index=True,
@@ -121,7 +121,7 @@ if is_master:
         key=f"editor_financeiro_{mes_selecionado}"
     )
     
-    # Se o usuário alterou algo na tabela, salva no estado global automaticamente
+    # Se houver mudanças, salva no estado global automaticamente
     if not df_editado.equals(df_atual):
         st.session_state["financas_data"]["meses"][mes_selecionado] = df_editado
         st.rerun()
