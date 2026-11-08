@@ -72,11 +72,11 @@ if is_admin:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
     if df_pendentes_atual.empty:
-        st.caption("Nenhuma solicitação pendente no momento.")
+        st.caption("Nenhuma solicitudade pendente no momento.")
     else:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
-                c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
+                c_inf, c_b1, c_b2 = st.columns()
                 c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
                 
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
@@ -101,6 +101,7 @@ if is_admin:
                     salvar_dados_fisicos()
                     st.warning("Recusada!")
                     st.rerun()
+
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
 lista_status = []
@@ -162,6 +163,7 @@ for i, esp in enumerate(especies_validas):
         else: 
             st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
+# --- FUNÇÃO DO PDF COM FONTE GRANDE, CLUBE E LAYOUT PREENCHIDO (10x7cm em A4) ---
 def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
     buf = io.BytesIO()
     canvas_obj = canvas.Canvas(buf, pagesize=A4)
@@ -177,26 +179,40 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
         x = m_x + (col * f_w)
         y = m_y + (lin * f_h)
         
-        v_str = "R$ 25,00" if str(r.get("Clube", "")).upper() == "ARO" else "R$ 35,00"
+        # Define se exibe ARO ou Outro na ficha
+        clube_ficha = "ARO" if str(r.get("Clube", "")).upper() == "ARO" else "Outro"
+        v_str = "R$ 25,00" if clube_ficha == "ARO" else "R$ 35,00"
         est_str = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
         
+        # Borda externa da etiqueta
         canvas_obj.setStrokeColor(colors.black)
+        canvas_obj.setLineWidth(1)
         canvas_obj.rect(x, y, f_w, f_h, stroke=1, fill=0)
-        canvas_obj.line(x, y + 5.5*cm, x + f_w, y + 5.5*cm)
-        canvas_obj.setFont("Helvetica-Bold", 11)
-        canvas_obj.drawCentredString(x + 5.0*cm, y + 5.9*cm, "ARO - RIO DO SUL")
-        canvas_obj.setFont("Helvetica", 9)
-        canvas_obj.drawString(x + 0.4*cm, y + 4.8*cm, f"Data: {data_str}")
-        canvas_obj.setFont("Helvetica-Bold", 10)
-        canvas_obj.drawString(x + 6.0*cm, y + 4.8*cm, f"Estaca: {est_str}")
         
-        canvas_obj.setFont("Helvetica", 9)
-        canvas_obj.drawString(x + 0.4*cm, y + 3.7*cm, f"Proprietário: {str(r['Proprietário'])[:35]}")
-        canvas_obj.drawString(x + 0.4*cm, y + 2.6*cm, f"Ave: {str(r['Nome da Ave'])[:20]}")
-        canvas_obj.drawString(x + 0.4*cm, y + 1.5*cm, f"Espécie: {str(r['Espécie'])}")
-        canvas_obj.drawString(x + 0.4*cm, y + 0.4*cm, f"Anilha: {str(r['Anilha'])}")
+        # Linha cabeçalho
+        canvas_obj.line(x, y + 5.3*cm, x + f_w, y + 5.3*cm)
+        
+        # --- TEXTOS COM FONTES GRANDES E BEM PREENCHIDOS ---
+        canvas_obj.setFont("Helvetica-Bold", 14)
+        canvas_obj.drawCentredString(x + 5.0*cm, y + 5.8*cm, "ARO - RIO DO SUL")
+        
+        canvas_obj.setFont("Helvetica-Bold", 11)
+        canvas_obj.drawString(x + 0.4*cm, y + 4.5*cm, f"DATA: {data_str}")
+        
+        canvas_obj.setFont("Helvetica-Bold", 13)
+        canvas_obj.drawString(x + 5.8*cm, y + 4.5*cm, f"ESTACA: {est_str}")
+        
         canvas_obj.setFont("Helvetica-Bold", 10)
-        canvas_obj.drawString(x + 6.0*cm, y + 0.4*cm, f"Valor: {v_str}")
+        canvas_obj.drawString(x + 0.4*cm, y + 3.5*cm, f"PROPRIETÁRIO: {str(r['Proprietário']).upper()[:32]}")
+        canvas_obj.drawString(x + 0.4*cm, y + 2.6*cm, f"AVE: {str(r['Nome da Ave']).upper()[:22]}")
+        canvas_obj.drawString(x + 0.4*cm, y + 1.8*cm, f"ESPÉCIE: {str(r['Espécie']).upper()}")
+        
+        # Exibição clara da afiliação do clube
+        canvas_obj.drawString(x + 0.4*cm, y + 1.0*cm, f"CLUBE: {clube_ficha}")
+        canvas_obj.drawString(x + 0.4*cm, y + 0.3*cm, f"ANILHA: {str(r['Anilha']).upper()}")
+        
+        canvas_obj.setFont("Helvetica-Bold", 12)
+        canvas_obj.drawString(x + 5.8*cm, y + 0.3*cm, f"VALOR: {v_str}")
         
     canvas_obj.save()
     buf.seek(0)
@@ -225,7 +241,6 @@ if role_atual == "master":
                 st.success("Torneio excluído com sucesso!")
                 st.rerun()
 
-    # --- INSCRIÇÃO MANUAL RÁPIDA COM SELEÇÃO DE PREÇO DINÂMICO ---
     st.write("---")
     st.markdown("### ➕ Inscrição Manual Rápida")
     with st.form("form_manual_master", clear_on_submit=True):
@@ -233,7 +248,7 @@ if role_atual == "master":
         m_ave = st.text_input("Nome da Ave:")
         m_esp = st.selectbox("Espécie:", especies_validas)
         m_anilha = st.text_input("Número da Anilha:")
-        m_socio = st.selectbox("Sócio da ARO?", ["Sim", "Não"], index=1) # Padrão Não Sócio
+        m_socio = st.selectbox("Sócio da ARO?", ["Sim", "Não"], index=1)
         
         if st.form_submit_button("⚡ Inscrever Ave Manualmente", use_container_width=True):
             if m_prop and m_ave and m_anilha:
@@ -261,7 +276,7 @@ if role_atual == "master":
                 st.success(f"✅ {m_ave} inserido na Estaca {sorteio} com sucesso!")
                 st.rerun()
             else:
-                st.error("⚠️ Preencha todos os campos para efetuar a inscrição manual.")
+                st.error("⚠️ Preencha todos os campos para registrar.")
 
     if not df_inscritos_atual.empty:
         st.write("---")
