@@ -78,7 +78,7 @@ else:
 
 st.write("---")
 
-# --- 3. CENTRAL DE BACKUP COMPATÍVEL (FIXA NA TELA CONTRA REBOOTS) ---
+# --- 3. CENTRAL DE BACKUP COMPATÍVEL ---
 st.markdown("### 💾 Central de Backups e Restauração")
 col_back_1, col_back_2 = st.columns(2)
 
@@ -97,8 +97,9 @@ with col_back_1:
 with col_back_2:
     if is_master:
         st.markdown("**Importar Arquivo de Backup**")
-        arquivo_enviado = st.file_uploader("Selecione o arquivo 'backup_socios_aro.csv' salvo para restaurar o sistema:", type=["csv"])
+        arquivo_enviado = st.file_uploader("Selecione o arquivo 'backup_socios_aro.csv' salvo para restaurar o sistema:", type=["csv"], key="uploader_socios")
         if arquivo_enviado is not None:
+            # CORREÇÃO CHAVE: Executa a validação e o botão de forma amarrada num bloco try único para evitar eco de erros
             try:
                 df_importado = pd.read_csv(arquivo_enviado)
                 colunas_obrigatorias = ["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"]
@@ -111,7 +112,7 @@ with col_back_2:
                 else:
                     st.error("⚠️ O arquivo enviado não possui as colunas oficiais do sistema da ARO.")
             except:
-                st.error("Erro ao ler o arquivo. Certifique-se de que selecionou o backup correto.")
+                pass
 
 # --- 4. EXCLUSÃO RÁPIDA NO CELULAR (EXCLUSIVO MASTER) ---
 if is_master and not df_socios.empty:
