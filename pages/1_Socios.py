@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit st
 import pandas as pd
 import os
 
@@ -15,32 +15,31 @@ st.title("👥 Cadastro de Sócios - ARO Rio do Sul")
 
 is_master = st.session_state.get("user_role") == "master"
 
-# CARREGAMENTO INTEGRADO E SEGURO CORRIGIDO CONTRA TABELAS VAZIAS
+# CARREGAMENTO INTELIGENTE: Começa com apenas 1 linha se o arquivo estiver em branco
 if "dados_socios_internos" not in st.session_state:
+    df_carregado = pd.DataFrame()
     if os.path.exists("./backup_socios.csv"):
         try:
             df_carregado = pd.read_csv("./backup_socios.csv")
-            # Se o arquivo existir mas estiver vazio (só cabeçalho), monta as 20 linhas padrão
-            if df_carregado.empty:
-                df_carregado = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
         except:
-            df_carregado = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
-    else:
-        df_carregado = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+            pass
+            
+    # Se o arquivo não existir, estiver vazio ou tiver apenas cabeçalhos, cria exatamente 1 linha inicial
+    if df_carregado.empty or len(df_carregado) == 0:
+        df_carregado = pd.DataFrame([{"Número": 1, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"}])
     
     st.session_state["dados_socios_internos"] = df_carregado
 
 df_socios = st.session_state["dados_socios_internos"]
 
-# Garantir conversão numérica limpa do sequencial
+# Garante o tipo numérico limpo para a sequência
 if not df_socios.empty:
-    df_socios["Número"] = pd.to_numeric(df_socios["Número"], errors='coerce').fillna(0).astype(int)
+    df_socios["Número"] = pd.to_numeric(df_socios["Número"], errors='coerce').fillna(1).astype(int)
 
 st.markdown("### 📊 Listagem de Sócios Cadastrados")
 
 if is_master:
-    # AJUSTADO: Mensagem antiga em st.caption removida daqui de forma definitiva
-    
+    # Renderização da tabela dinâmica controlada por linhas crescentes
     df_editado = st.data_editor(
         df_socios,
         hide_index=True,
@@ -60,21 +59,9 @@ if is_master:
     )
     
     if not df_editado.equals(df_socios):
-        # Recalcula e preenche o número sequencial caso novas linhas sejam inseridas via celular ou PC
-        ultimo_num = 0
-        for idx, row in df_editado.iterrows():
-            try:
-                val_num = int(float(row["Número"]))
-            except:
-                val_num = 0
-                
-            if val_num == 0:
-                ultimo_num += 1
-                df_editado.at[idx, "Número"] = int(ultimo_num)
-            else:
-                ultimo_num = val_num
+        # Recalcula estritamente a sequência correta 1, 2, 3, 4... baseado no número total de linhas
+        df_editado["Número"] = list(range(1, len(df_editado) + 1))
         
-        df_editado["Número"] = df_editado["Número"].astype(int)
         st.session_state["dados_socios_internos"] = df_editado
         try:
             df_editado.to_csv("./backup_socios.csv", index=False)
@@ -83,17 +70,22 @@ if is_master:
         st.rerun()
 
 else:
-    st.dataframe(
-        df_socios,
-        hide_index=True,
-        column_config={
-            "Número": "Nº",
-            "ID": "ID ARO",
-            "Nome": "Nome Completo",
-            "Telefone": "Telefone/Contato",
-            "CPF": "CPF",
-            "CTF": "CTF IBAMA",
-            "Status": "Status"
-        },
-        use_container_width=True
-    )
+    # Modo de visualização limpa para a diretoria, removendo registros de teste vazios
+    df_leitura = df_socios[df_socios["Nome"].get(0, "") != ""] if "Nome" in df_socios.columns else df_socios
+    if df_leitura.empty:
+        st.info("Nenhum sócio registrado no momento.")
+    else:
+        st.dataframe(
+            df_leitura,
+            hide_index=True,
+            column_config={
+                "Número": "Nº",
+                "ID": "ID ARO",
+                "Nome": "Nome Completo",
+                "Telefone": "Telefone/Contato",
+                "CPF": "CPF",
+                "CTF": "CTF IBAMA",
+                "Status": "Status"
+            },
+            use_container_width=True
+        )
