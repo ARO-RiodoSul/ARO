@@ -104,10 +104,10 @@ if is_master:
                 estacas_livres = [e for e in range(1, limite_inicial + 1) if e not in estacas_ocupadas]
                 
                 if estacas_livres:
-                    estaca_sorteada = random.choice(estacas_livres)
+                    staca_sorteada = random.choice(estacas_livres)
                 else:
                     if estacas_ocupadas:
-                        estaca_sorteada = max(estacas_ocupadas) + 1
+                        staca_sorteada = max(estacas_ocupadas) + 1
                     else:
                         staca_sorteada = limite_inicial + 1
                 
@@ -116,11 +116,11 @@ if is_master:
                     "Nome da Ave": nome_ave.strip(),
                     "Espécie": especie,
                     "Anilha": anilha.strip(),
-                    "Estaca": int(estaca_sorteada)
+                    "Estaca": int(staca_sorteada)
                 }])
                 
                 st.session_state["torneio_inscricoes_aro"] = pd.concat([df_inscritos, nova_inscricao], ignore_index=True)
-                st.success(f"Sucesso! Ave '{nome_ave}' inscrita na Espécie {especie} | Estaca Selecionada: {estaca_sorteada}")
+                st.success(f"Sucesso! Ave '{nome_ave}' inscrita na Espécie {especie} | Estaca Selecionada: {staca_sorteada}")
                 st.rerun()
     st.write("---")
 
@@ -138,55 +138,61 @@ for i, esp in enumerate(especies_validas):
         else:
             df_ordenado = df_filtrado.sort_values(by="Estaca").reset_index(drop=True)
             
-            if is_master:
-                # Se for Master, exibe o data_editor para permitir a exclusão individual por linha
-                st.caption("🗑️ Para deletar uma ave específica, clique no quadrado ao lado esquerdo da linha dela para selecioná-la e pressione 'Delete' no seu teclado.")
-                df_editado_lista = st.data_editor(
-                    df_ordenado[["Estaca", "Nome da Ave", "Proprietário", "Anilha"]],
-                    hide_index=True,
-                    num_rows="dynamic", # Libera a remoção nativa de linhas pelo Streamlit
-                    column_config={
-                        "Estaca": st.column_config.NumberColumn("Estaca", disabled=True, format="%d"),
-                        "Nome da Ave": st.column_config.TextColumn("Nome do Pássaro", disabled=True),
-                        "Proprietário": st.column_config.TextColumn("Proprietário / Criador", disabled=True),
-                        "Anilha": st.column_config.TextColumn("Nº da Anilha", disabled=True)
-                    },
-                    use_container_width=True,
-                    key=f"aba_editor_{esp}"
-                )
-                
-                # Se o número de linhas diminuiu, significa que você deletou uma ave
-                if len(df_editado_lista) != len(df_ordenado):
-                    # Filtra o banco global removendo o item que sumiu da aba atual
-                    anilhas_restantes = df_editado_lista["Anilha"].tolist()
-                    df_global_atualizado = df_inscritos[~((df_inscritos["Espécie"] == esp) & (~df_inscritos["Anilha"].isin(anilhas_restantes)))]
-                    st.session_state["torneio_inscricoes_aro"] = df_global_atualizado
-                    st.rerun()
-            else:
-                # Visualização estática simples para os usuários comuns
-                st.dataframe(
-                    df_ordenado[["Estaca", "Nome da Ave", "Proprietário", "Anilha"]],
-                    hide_index=True,
-                    column_config={
-                        "Estaca": st.column_config.NumberColumn("Estaca / Gaiola", format="%d"),
-                        "Nome da Ave": "Nome do Pássaro",
-                        "Proprietário": "Proprietário / Criador",
-                        "Anilha": "Nº da Anilha"
-                    },
-                    use_container_width=True
-                )
+            st.dataframe(
+                df_ordenado[["Estaca", "Nome da Ave", "Proprietário", "Anilha"]],
+                hide_index=True,
+                column_config={
+                    "Estaca": st.column_config.NumberColumn("Estaca / Gaiola", format="%d"),
+                    "Nome da Ave": "Nome do Pássaro",
+                    "Proprietário": "Proprietário / Criador",
+                    "Anilha": "Nº da Anilha"
+                },
+                use_container_width=True
+            )
 
-# --- 5. RECURSO DE ZERAR TORNEIO COMPLETO (EXCLUSIVO MASTER) ---
+# --- 5. CENTRAL DE EXCLUSÃO MANUAL PARA CELULAR (EXCLUSIVO MASTER) ---
+if is_master and not df_inscritos.empty:
+    st.write("---")
+    st.markdown("### 🗑️ Cancelar Inscrição (Remover Ave)")
+    st.caption("Desenvolvido para exclusão rápida via celular sem depender de teclado físico.")
+    
+    # Criar uma lista textual compreensível para o menu de exclusão
+    opcoes_exclusao = []
+    for idx, row in df_inscritos.iterrows():
+        opcoes_exclusao.append(f"[{row['Espécie']}] Estaca {row['Estaca']} - {row['Nome da Ave']} (Criador: {row['Proprietário']})")
+    
+    ave_selecionada_txt = st.selectbox("Selecione a ave que deseja remover:", opcoes_exclusao, key="combo_deletar_ave")
+    
+    # Caixa de checagem para confirmação de segurança (Evita cliques errados na tela do celular)
+    confirmar_check = st.checkbox("⚠️ Marque aqui para confirmar que deseja excluir esta ave", key="check_seguranca_ave")
+    
+    if st.button("❌ Deletar Ave Selecionada", type="secondary", use_container_width=True):
+        if confirmar_check:
+            # Encontra o índice correspondente no DataFrame global baseado na seleção do selectbox
+            posicao_lista = opcoes_exclusao.index(ave_selecionada_txt)
+            indice_original = df_inscritos.index[posicao_lista]
+            
+            # Deleta a linha do banco e atualiza a sessão
+            st.session_state["torneio_inscricoes_aro"] = df_inscritos.drop(indice_original).reset_index(drop=True)
+            st.success("A ave foi removida do torneio com sucesso!")
+            st.rerun()
+        else:
+            st.error("Por favor, marque a caixa de confirmação de segurança antes de clicar em deletar.")
+
+# --- 6. RECURSO DE ZERAR TORNEIO COMPLETO (EXCLUSIVO MASTER) ---
 if is_master:
     st.write("---")
     st.markdown("### ⚠️ Zona de Perigo Administrativa")
     
-    col_vazia, col_botao_reset = st.columns([3, 1])
-    with col_botao_reset:
-        if st.button("🗑️ ZERAR TORNEIO COMPLETO", type="primary", use_container_width=True):
-            # Limpa o DataFrame deixando ele totalmente zerado para o próximo evento
+    # Confirmação dupla para resetar o torneio
+    confirmar_reset_geral = st.checkbox("💥 Marque aqui para CONFIRMAR a exclusão de TODOS os inscritos deste torneio", key="check_reset_geral")
+    
+    if st.button("🗑️ ZERAR TORNEIO COMPLETO", type="primary", use_container_width=True):
+        if confirmar_reset_geral:
             st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(
                 columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"]
             )
             st.warning("O torneio foi resetado! Todas as inscrições foram apagadas com sucesso.")
             st.rerun()
+        else:
+            st.error("Por favor, marque a caixa de confirmação para autorizar o reset completo do torneio.")
