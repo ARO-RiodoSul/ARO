@@ -9,29 +9,20 @@ if "autenticado" not in st.session_state:
 
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"):
-        st.columns(3)[1].image("logo.png", use_container_width=True)
-    else:
-        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"): st.columns(3).image("logo.png", use_container_width=True)
+    else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
+        u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
-            if u == "Junior Rebelo" and s == "270688":
-                st.session_state.update({"autenticado": True, "user_role": "master"})
-                st.rerun()
-            elif u == "Kleven" and s == "12345678":
-                st.session_state.update({"autenticado": True, "user_role": "leitor"})
-                st.rerun()
-            else:
-                st.error("Incorreto.")
+            if u == "Junior Rebelo" and s == "270688": st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
+            elif u == "Kleven" and s == "12345678": st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
+            else: st.error("Incorreto.")
     st.stop()
 
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)])
 
-lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in [2027, 2028] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
+lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
 if "saldo_anterior_master" not in st.session_state:
     if os.path.exists("backup_saldo_ant.txt"):
@@ -49,54 +40,77 @@ t_sai = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Saída
 s_ges = t_ent - t_sai
 s_tot = t_ent + st.session_state["saldo_anterior_master"] - t_sai
 
+# --- FUNÇÃO GERADORA DE TEXTO FORMATADO PARA PDF ---
+def gerar_relatorio_texto():
+    txt = "========================================================\n"
+    txt += "        RELATÓRIO FINANCEIRO COMPLETO - ARO RIO DO SUL\n"
+    txt += "========================================================\n\n"
+    for m in lista_meses:
+        df_m_p = st.session_state["dados_meses_financeiros"][m]
+        df_at = df_m_p[(df_m_p["Entradas"] > 0) | (df_m_p["Saídas"] > 0) | (df_m_p["Motivo"] != "")]
+        m_e = pd.to_numeric(df_m_p["Entradas"], errors='coerce').sum()
+        m_s = pd.to_numeric(df_m_p["Saídas"], errors='coerce').sum()
+        
+        txt += f"--------- PERÍODO: {m} ---------\n"
+        if not df_at.empty:
+            for _, r in df_at.iterrows():
+                txt += f"Dia {int(r['Dia'])} | Entrada: R$ {r['Entradas']:.2f} | Saída: R$ {r['Saídas']:.2f} | Motivo: {r['Motivo']}\n"
+        else:
+            txt += "Nenhum lançamento ativo neste mês.\n"
+        txt += f"TOTAL ENTRADAS: R$ {m_e:.2f} | TOTAL SAÍDAS: R$ {m_s:.2f} | LÍQUIDO: R$ {(m_e - m_s):.2f}\n\n"
+    
+    txt += "========================================================\n"
+    txt += "               FECHAMENTO CONSOLIDADO\n"
+    txt += "========================================================\n"
+    txt += f"🏦 Saldo Anterior: R$ {st.session_state['saldo_anterior_master']:.2f}\n"
+    txt += f"🟢 Total de Entradas: R$ {t_ent:.2f}\n"
+    txt += f"🔴 Total de Saídas: R$ {t_sai:.2f}\n"
+    txt += f"📊 Saldo (Gestão Atual): R$ {s_ges:.2f}\n"
+    txt += f"💰 Saldo (Total): R$ {s_tot:.2f}\n"
+    return txt
+
+# --- NAVEGAÇÃO DO APLICATIVO ---
 if st.session_state["tela_atual"] == "menu":
-    c_l, c_t, c_o = st.columns([1, 4, 1])
+    c_l, c_t, c_o = st.columns()
     if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
     c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-    if c_o.button("🔒 Sair"):
-        st.session_state["autenticado"] = False
-        st.rerun()
+    if c_o.button("🔒 Sair"): st.session_state["autenticado"] = False; st.rerun()
     st.markdown("---")
-    st.info("⭐ Acesso Master" if st.session_state["user_role"] == "master" else "ℹ️ Acesso de Consulta (Apenas Leitura)")
     cb1, cb2 = st.columns(2)
-    if cb1.button("👥 Sócios", use_container_width=True, type="primary"):
-        st.session_state["tela_atual"] = "socios"
-        st.rerun()
-    if cb2.button("🪙 Finanças", use_container_width=True, type="primary"):
-        st.session_state["tela_atual"] = "caixa"
-        st.rerun()
+    if cb1.button("👥 Sócios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "socios"; st.rerun()
+    if cb2.button("🪙 Finanças", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "caixa"; st.rerun()
 
 elif st.session_state["tela_atual"] == "socios":
-    if st.button("⬅️ Voltar ao Menu"):
-        st.session_state["tela_atual"] = "menu"
-        st.rerun()
+    if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("👥 Controle de Sócios")
     if st.session_state["user_role"] == "master":
         df_m = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"])}, hide_index=True)
-        if not df_m.equals(st.session_state["dados_socios_internos"]):
-            st.session_state["dados_socios_internos"] = df_m
-            df_m.to_csv("backup_socios.csv", index=False)
-            st.toast("💾 Salvo automaticamente!")
-    else:
-        st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
+        if not df_m.equals(st.session_state["dados_socios_internos"]): st.session_state["dados_socios_internos"] = df_m; df_m.to_csv("backup_socios.csv", index=False); st.toast("💾 Salvo!"); st.rerun()
+    else: st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
 
 elif st.session_state["tela_atual"] == "caixa":
-    if st.button("⬅️ Voltar ao Menu"):
-        st.session_state["tela_atual"] = "menu"
-        st.rerun()
+    if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("🪙 Controle Financeiro - Finanças")
     
+    # BOTÃO EXCLUSIVO MASTER PARA EXPORTAR RELATÓRIO EM ARQUIVO DIRETO
+    if st.session_state["user_role"] == "master":
+        dados_relatorio = gerar_relatorio_texto()
+        st.download_button(
+            label="📥 Gerar e Baixar Relatório Financeiro (.txt / .pdf)",
+            data=dados_relatorio,
+            file_name="relatorio_financeiro_aro.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+        st.info("💡 Nota: O arquivo será baixado de forma limpa. Para salvá-lo como PDF no celular ou computador, basta abrir o arquivo baixado e escolher 'Salvar como PDF'.")
+            
     _, c_ant, _ = st.columns(3)
     with c_ant:
         st.markdown("<h3 style='text-align: center;'>🏦 Saldo Anterior</h3>", unsafe_allow_html=True)
         if st.session_state["user_role"] == "master":
             n_v = st.number_input("Editar", value=st.session_state["saldo_anterior_master"], format="%.2f", label_visibility="collapsed")
-            if n_v != st.session_state["saldo_anterior_master"]:
-                st.session_state["saldo_anterior_master"] = n_v
-                with open("backup_saldo_ant.txt", "w") as f: f.write(str(n_v))
-                st.rerun()
-        else:
-            st.markdown(f"<h4 style='text-align: center;'>R$ {st.session_state['saldo_anterior_master']:,.2f}</h4>", unsafe_allow_html=True)
+            if n_v != st.session_state["saldo_anterior_master"]: st.session_state["saldo_anterior_master"] = n_v; open("backup_saldo_ant.txt", "w").write(str(n_v)); st.rerun()
+        else: st.markdown(f"<h4 style='text-align: center;'>R$ {st.session_state['saldo_anterior_master']:,.2f}</h4>", unsafe_allow_html=True)
             
     st.markdown("<br>", unsafe_allow_html=True)
     cm1, cm2 = st.columns(2)
@@ -116,8 +130,7 @@ elif st.session_state["tela_atual"] == "caixa":
         if not df_m_ed.equals(df_m_at):
             st.session_state["dados_meses_financeiros"][m_sel] = df_m_ed
             with open("backup_financas.pkl", "wb") as f: pickle.dump(st.session_state["dados_meses_financeiros"], f)
-            st.toast("💾 Salvo!")
-            st.rerun()
+            st.toast("💾 Salvo!"); st.rerun()
         with st.expander("➕ Criar Linha Dupla para o mesmo Dia"):
             with st.form("f_ex", clear_on_submit=True):
                 cd, ce, cs, cm = st.columns(4)
@@ -128,14 +141,10 @@ elif st.session_state["tela_atual"] == "caixa":
                 if st.form_submit_button("Inserir") and (e_x > 0 or s_x > 0):
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
                     with open("backup_financas.pkl", "wb") as f: pickle.dump(st.session_state["dados_meses_financeiros"], f)
-                    st.toast("💾 Salvo!")
-                    st.rerun()
-    else:
-        st.dataframe(df_m_at, use_container_width=True, hide_index=True)
+                    st.toast("💾 Salvo!"); st.rerun()
+    else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
 
     st.markdown("---")
     m_e = pd.to_numeric(df_m_at["Entradas"], errors='coerce').sum()
-    m_s = pd.to_numeric(df_mes_ativo["Saídas"] if 'df_mes_ativo' in locals() else df_m_at["Saídas"], errors='coerce').sum()
-    st.columns(3)[0].markdown(f"📊 **Total Entradas do Mês:** R$ {m_e:,.2f}")
-    st.columns(3)[1].markdown(f"📊 **Total Saídas do Mês:** R$ {m_s:,.2f}")
-    st.columns(3)[2].markdown(f"📉 **Saldo Líquido do Mês:** R$ {(m_e - m_s):,.2f}")
+    m_s = pd.to_numeric(df_m_at["Saídas"], errors='coerce').sum()
+    st.write(f"📊 **Mês Atual - Entradas:** R$ {m_e:,.2f} | **Saídas:** R$ {m_s:,.2f} | **Líquido:** R$ {(m_e - m_s):,.2f}")
