@@ -76,12 +76,10 @@ if is_admin:
     else:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
-                # FIX: Especificando os tamanhos para corrigir o TypeError de st.columns()
                 c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
                 c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
                 
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
-                    # FIX: Corrigido para inicializar a lista corretamente sem quebras
                     ocupadas = []
                     if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
                         df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == row["Espécie"]]
@@ -103,10 +101,9 @@ if is_admin:
                     salvar_dados_fisicos()
                     st.warning("Recusada!")
                     st.rerun()
-
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
-lista_status =
+lista_status = []
 
 if not df_pendentes_atual.empty:
     filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
@@ -228,18 +225,18 @@ if role_atual == "master":
                 st.success("Torneio excluído com sucesso!")
                 st.rerun()
 
-    # --- NOVO CAMPO: INSCRIÇÃO MANUAL PARA NÃO SÓCIOS (DIRETO NAS CONFIRMADAS) ---
+    # --- INSCRIÇÃO MANUAL RÁPIDA COM SELEÇÃO DE PREÇO DINÂMICO ---
     st.write("---")
-    st.markdown("### ➕ Inscrição Manual Rápida (Não Sócios / Visitantes)")
+    st.markdown("### ➕ Inscrição Manual Rápida")
     with st.form("form_manual_master", clear_on_submit=True):
         m_prop = st.text_input("Nome do Proprietário:")
         m_ave = st.text_input("Nome da Ave:")
         m_esp = st.selectbox("Espécie:", especies_validas)
         m_anilha = st.text_input("Número da Anilha:")
+        m_socio = st.selectbox("Sócio da ARO?", ["Sim", "Não"], index=1) # Padrão Não Sócio
         
         if st.form_submit_button("⚡ Inscrever Ave Manualmente", use_container_width=True):
             if m_prop and m_ave and m_anilha:
-                # Sorteio automático de estaca livre idêntico ao fluxo de aprovação
                 ocupadas = []
                 if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
                     df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == m_esp]
@@ -249,20 +246,19 @@ if role_atual == "master":
                 livres = [x for x in range(1, lim + 1) if x not in ocupadas]
                 sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
                 
-                # Visitantes manuais entram direto como Não Sócio (Valor: 35.0, Clube: Outro)
                 nova_m = pd.DataFrame([{
                     "Proprietário": m_prop.strip(),
                     "Nome da Ave": m_ave.strip(),
                     "Espécie": m_esp,
                     "Anilha": m_anilha.strip(),
                     "Estaca": int(sorteio),
-                    "Valor": 35.0,
-                    "Clube": "Outro"
+                    "Valor": 25.0 if m_socio == "Sim" else 35.0,
+                    "Clube": "ARO" if m_socio == "Sim" else "Outro"
                 }])
                 
                 st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_m], ignore_index=True)
                 salvar_dados_fisicos()
-                st.success(f"✅ {m_ave} inserido com sucesso na Estaca {sorteio}!")
+                st.success(f"✅ {m_ave} inserido na Estaca {sorteio} com sucesso!")
                 st.rerun()
             else:
                 st.error("⚠️ Preencha todos os campos para efetuar a inscrição manual.")
