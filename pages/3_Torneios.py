@@ -9,6 +9,12 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 
 st.set_page_config(page_title="Torneios - ARO", page_icon="🦅", layout="wide")
+
+# --- TRAVA DE SEGURANÇA GLOBAL (Adicionada) ---
+if not st.session_state.get("autenticado", False):
+    st.warning("⚠️ Faça Login antes de acessar")
+    st.stop()
+
 st.title("🦅 Gestão de Torneios - ARO Rio do Sul")
 
 is_master = st.session_state.get("user_role") == "master"
