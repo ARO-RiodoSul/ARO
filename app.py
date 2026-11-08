@@ -8,7 +8,22 @@ st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if
 # TRAVA PARA FORÇAR A LOGO E NOME NO CELULAR
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
-# --- SISTEMA DE LOGIN SEGURO COM NOVOS NÍVEIS DE USUÁRIO ---
+# --- INICIALIZAÇÃO DO BANCO DE LOGINS DINÂMICOS ---
+if "banco_usuarios_dinamicos" not in st.session_state:
+    if os.path.exists("backup_usuarios.pkl"):
+        try:
+            st.session_state["banco_usuarios_dinamicos"] = pickle.load(open("backup_usuarios.pkl", "rb"))
+        except:
+            st.session_state["banco_usuarios_dinamicos"] = {}
+    else:
+        st.session_state["banco_usuarios_dinamicos"] = {
+            "Socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
+            "Visitante": {"senha": "aro999", "role": "visitante", "socio_vinculado": "Nenhum"}
+        }
+
+usuarios_cadastrados = st.session_state["banco_usuarios_dinamicos"]
+
+# --- SISTEMA DE LOGIN SEGURO ---
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "visitante", "tela_atual": "menu"})
 
@@ -25,11 +40,9 @@ if not st.session_state["autenticado"]:
         u = st.text_input("Usuário")
         s = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
-            # PERMISSÃO MASTER (JUNIOR REBELO)
             if u == "Junior Rebelo" and s == "270688":
                 st.session_state.update({"autenticado": True, "user_role": "master"})
                 st.rerun()
-            # 5 USUÁRIOS CONFIGURADOS COM PERMISSÃO DE DIRETORIA
             elif u == "Kleven" and s == "12345678":
                 st.session_state.update({"autenticado": True, "user_role": "diretoria"})
                 st.rerun()
@@ -45,12 +58,8 @@ if not st.session_state["autenticado"]:
             elif u == "Vanderlei" and s == "87654321":
                 st.session_state.update({"autenticado": True, "user_role": "diretoria"})
                 st.rerun()
-            # USUÁRIOS PADRÃO (SÓCIO E VISITANTE ADICIONAIS)
-            elif u == "Socio" and s == "aro123":
-                st.session_state.update({"autenticado": True, "user_role": "socio"})
-                st.rerun()
-            elif u == "Visitante" and s == "aro999":
-                st.session_state.update({"autenticado": True, "user_role": "visitante"})
+            elif u in usuarios_cadastrados and usuarios_cadastrados[u]["senha"] == s:
+                st.session_state.update({"autenticado": True, "user_role": usuarios_cadastrados[u]["role"]})
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
@@ -62,6 +71,8 @@ lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in
 # CARREGAMENTO CENTRALIZADO DE BANCOS DE DADOS
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+
+df_socios_global = st.session_state["dados_socios_internos"]
 
 if "saldo_anterior_master" not in st.session_state:
     if os.path.exists("backup_saldo_ant.txt"):
@@ -104,3 +115,60 @@ if role in ["master", "diretoria"]:
     st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda do seu navegador ou celular para navegar entre as planilhas de Sócios, Finanças e Torneios de forma independente.</p>", unsafe_allow_html=True)
 else:
     st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para visualizar a página de **Torneios**. As abas de Sócios e Finanças são restritas à administração.</p>", unsafe_allow_html=True)
+
+# --- CENTRAL DE CADASTRO DINÂMICO DE LOGINS (EXCLUSIVO MASTER) ---
+if role == "master":
+    st.write("---")
+    st.markdown("### 🔑 Central de Gerenciamento de Acessos")
+    
+    col_cad_1, col_cad_2 = st.columns(2)
+    
+    with col_cad_1:
+        st.markdown("**Cadastrar Novo Usuário**")
+        novo_u = st.text_input("Nome de Usuário (Login):", key="input_u")
+        novo_s = st.text_input("Senha de Acesso:", type="password", key="input_s")
+        tipo_role = st.selectbox("Categoria/Nível:", ["Sócio", "Visitante"], key="select_role")
+        
+        # Puxa os nomes da planilha de sócios de forma limpa para preenchimento
+        socio_vinc = "Nenhum"
+        if tipo_role == "Sócio":
+            lista_nomes_socios = ["Selecione o Sócio..."]
+            if not df_socios_global.empty and "Nome" in df_socios_global.columns:
+                nomes_validos = df_socios_global["Nome"].dropna().str.strip().tolist()
+                lista_nomes_socios.extend([x for x in nomes_validos if x != ""])
+            
+            socio_vinc = st.selectbox("Vincular Sócio Oficial:", lista_nomes_socios, key="select_vinc")
+            
+        if st.button("Salvar Novo Usuário", use_container_width=True):
+            if novo_u.strip() and novo_s.strip():
+                if novo_u.strip() in ["Junior Rebelo", "Kleven", "Valter", "Peterson", "Mauro", "Vanderlei"]:
+                    st.error("Este nome de usuário é reservado para a administração fixa!")
+                elif tipo_role == "Sócio" and socio_vinc == "Selecione o Sócio...":
+                    st.error("Por favor, selecione qual sócio oficial será vinculado a este login!")
+                else:
+                    role_convertida = "socio" if tipo_role == "Sócio" else "visitante"
+                    st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {
+                        "senha": novo_s.strip(), 
+                        "role": role_convertida,
+                        "socio_vinculado": socio_vinc
+                    }
+                    try:
+                        pickle.dump(st.session_state["banco_usuarios_dinamicos"], open("backup_usuarios.pkl", "wb"))
+                        st.success(f"Usuário '{novo_u.strip()}' cadastrado com sucesso!")
+                        st.rerun()
+                    except:
+                        st.error("Erro ao gravar arquivo físico.")
+            else:
+                st.error("Preencha todos os campos do formulário!")
+                    
+    with col_cad_2:
+        st.markdown("**Usuários Cadastrados Ativos**")
+        lista_exibicao = []
+        for k, v in usuarios_cadastrados.items():
+            lista_exibicao.append({
+                "Usuário": k,
+                "Nível": str(v["role"]).upper(),
+                "Sócio Vinculado": v.get("socio_vinculado", "Nenhum")
+            })
+        st.dataframe(pd.DataFrame(lista_exibicao), use_container_width=True, hide_index=True)
+
