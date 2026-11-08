@@ -76,21 +76,22 @@ if is_admin:
     else:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
-                c_inf, c_b1, c_b2 = st.columns()
+                # FIX: Especificando os tamanhos para corrigir o TypeError de st.columns()
+                c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
                 c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
                 
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
+                    # FIX: Corrigido para inicializar a lista corretamente sem quebras
                     ocupadas = []
-                    if not df_inscritos_atual.empty:
+                    if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
                         df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == row["Espécie"]]
-                        if "Estaca" in df_esp.columns: 
-                            ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
+                        ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
                     
                     lim = 50 if row["Espécie"] in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if row["Espécie"] in ["Canário", "Azulão"] else 5)
                     livres = [x for x in range(1, lim + 1) if x not in ocupadas]
                     sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
                     
-                    nova_c = pd.DataFrame([{"Proprietário": row["Proprietário"], "Nome da Ave": row["Nome da Ave"], "Espécie": row["Espécie"], "Anilha": row["Anilha"], "Estaca": int(sorteio), "Valor": row["Valor"], "Clube": row["Clube"]}])
+                    nova_c = pd.DataFrame([{"Proprietário": row["Proprietário"], "Nome da Ave": row["Nome da Ave"], "Espécie": row["Espécie"], "Anilha": row["Anilha"], "Estaca": int(sorteio), "Valor": row["Valor"], "Clube": row.get("Clube", "Outro")}])
                     st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_c], ignore_index=True)
                     st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
                     salvar_dados_fisicos()
@@ -102,6 +103,7 @@ if is_admin:
                     salvar_dados_fisicos()
                     st.warning("Recusada!")
                     st.rerun()
+
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
 lista_status = []
@@ -169,7 +171,7 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
     data_str = data_torneio.strftime('%d/%m/%Y')
     m_x, m_y, f_w, f_h = 0.5 * cm, 0.8 * cm, 10.0 * cm, 7.0 * cm
     
-    for idx, r in df_inscritos.iterrows():
+    for idx, r in df_inscritos.reset_index(drop=True).iterrows():
         pos = idx % 8
         if pos == 0 and idx > 0:
             canvas_obj.showPage()
