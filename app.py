@@ -22,11 +22,10 @@ if not st.session_state["autenticado"]:
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)])
 
-# CORREÇÃO DEFINITIVA DA CRONOLOGIA DOS MESES
-lista_meses = ["Dezembro 2026"]
-for a in:
-    for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]:
-        lista_meses.append(f"{m} {a}")
+# CRONOLOGIA DOS MESES DECLARADA DIRETAMENTE SEM O LAÇO COM ERRO
+lista_meses = ["Dezembro 2026", 
+               "Janeiro 2027", "Fevereiro 2027", "Março 2027", "Abril 2027", "Maio 2027", "Junho 2027", "Julho 2027", "Agosto 2027", "Setembro 2027", "Outubro 2027", "Novembro 2027", "Dezembro 2027",
+               "Janeiro 2028", "Fevereiro 2028", "Março 2028", "Abril 2028", "Maio 2028", "Junho 2028", "Julho 2028", "Agosto 2028", "Setembro 2028", "Outubro 2028", "Novembro 2028", "Dezembro 2028"]
 
 if "saldo_anterior_master" not in st.session_state:
     if os.path.exists("backup_saldo_ant.txt"):
