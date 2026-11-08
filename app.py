@@ -20,7 +20,7 @@ if not st.session_state["autenticado"]:
     else:
         st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🦅 CRIATÓRIO 047</h1>", unsafe_allow_html=True)
         
-    st.markdown("<h3 style='text-align: center; color: #6B7280; font-family: sans-serif;'>Sistema de Gestão Residencial</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #6B7280; font-family: sans-serif;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #9CA3AF;'>Insira suas credenciais abaixo para acessar o sistema.</p>", unsafe_allow_html=True)
     
     st.markdown("---")
@@ -32,7 +32,8 @@ if not st.session_state["autenticado"]:
         botao_entrar = st.form_submit_button("Entrar no Sistema")
         
         if botao_entrar:
-            if usuario == "admin" and senha == "1234":
+            # NOVAS CREDENCIAIS CONFIGURADAS
+            if usuario == "Junior Rebelo" and senha == "270688":
                 st.session_state["autenticado"] = True
                 st.success("Acesso autorizado! Carregando...")
                 st.rerun()
@@ -49,7 +50,7 @@ if not st.session_state["autenticado"]:
 try:
     url_base = st.secrets["connections"]["gsheets"]["spreadsheet"]
     if "edit?" in url_base:
-        link_limpo = url_base.split("/edit")
+        link_limpo = url_base.split("/edit")[0]
         url_socios = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Socios"
         url_financeiro = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Financeiro"
     else:
