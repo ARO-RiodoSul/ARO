@@ -7,6 +7,7 @@ st.set_page_config(page_title="Sócios - Painel ARO", page_icon="👥", layout="
 role_atual = str(st.session_state.get("user_role", "")).strip().lower()
 usuario_logado = str(st.session_state.get("username", "")).strip().lower()
 
+# Libera o acesso à página para master, diretoria e admin
 if role_atual not in ["master", "diretoria", "admin"] and usuario_logado not in ["master", "admin"]:
     st.error("🔒 Acesso Restrito! Esta página é exclusiva para Master ou Diretoria.")
     st.stop()
@@ -23,7 +24,7 @@ def obter_planilha_fixa_socios():
     ]
     return pd.DataFrame(dados_oficiais)
 
-# Inicializa ou recupera a lista dinâmica a partir da base oficial fixa
+# CORREÇÃO CHAVE: Inicialização global liberada para qualquer nível de acesso permitido (Master ou Diretoria)
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = obter_planilha_fixa_socios()
 
