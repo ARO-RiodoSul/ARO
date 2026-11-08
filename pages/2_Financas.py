@@ -5,7 +5,6 @@ import datetime
 # Configuração da página
 st.set_page_config(page_title="Finanças - Painel ARO", page_icon="💰", layout="wide")
 
-# Título do Módulo
 st.title("💰 Fluxo de Caixa - ARO Rio do Sul")
 
 # Validar se o usuário é Master para liberar a edição
@@ -32,79 +31,24 @@ while current <= end_date:
     else:
         current = datetime.date(current.year, current.month + 1, 1)
 
-# CORREÇÃO AQUI: Inicializar com tabela dinâmica vazia (sem travar 31 linhas fixas)
+# Inicializar com tabela vazia estruturada se não existir
 for m in lista_meses:
     if m not in st.session_state["financas_data"]["meses"]:
         st.session_state["financas_data"]["meses"][m] = pd.DataFrame(
             columns=["Dia", "Entradas", "Saídas", "Motivo"]
         )
 
-# --- CÁLCULO E AGREGAÇÃO DOS TOTAIS ---
-total_entradas_geral = 0.0
-total_saidas_geral = 0.0
-
-for m in lista_meses:
-    df_mes = st.session_state["financas_data"]["meses"][m]
-    if not df_mes.empty:
-        total_entradas_geral += pd.to_numeric(df_mes["Entradas"]).sum()
-        total_saidas_geral += pd.to_numeric(df_mes["Saídas"]).sum()
-
-saldo_anterior = st.session_state["financas_data"]["saldo_anterior"]
-saldo_gestao = total_entradas_geral - total_saidas_geral
-saldo_total = saldo_anterior + saldo_gestao
-
-# --- 1. MENU PRINCIPAL (Métricas) ---
-st.markdown("### 📊 Resumo Consolidado Geral")
-
-col_topo = st.columns(1)
-with col_topo:
-    if is_master:
-        novo_saldo_anterior = st.number_input("Saldo Anterior (R$)", value=float(saldo_anterior), step=100.0, key="edit_saldo_ant")
-        if novo_saldo_anterior != saldo_anterior:
-            st.session_state["financas_data"]["saldo_anterior"] = novo_saldo_anterior
-            st.rerun()
-    else:
-        st.metric(label="Saldo Anterior", value=f"R$ {saldo_anterior:,.2f}")
-
-st.write("---")
-
-col_meio = st.columns(2)
-with col_meio:
-    st.metric(label="Total de Entradas", value=f"R$ {total_entradas_geral:,.2f}")
-with col_meio:
-    st.metric(label="Total de Saídas", value=f"R$ {total_saidas_geral:,.2f}")
-
-st.write("---")
-
-col_baixo = st.columns(2)
-with col_baixo:
-    st.metric(label="Saldo (Gestão Atual)", value=f"R$ {saldo_gestao:,.2f}")
-with col_baixo:
-    st.metric(label="Saldo (Total)", value=f"R$ {saldo_total:,.2f}")
-
-st.write("---")
-
-# --- 2. SELEÇÃO DE VISUALIZAÇÃO MENSAL ---
+# --- SELEÇÃO DE VISUALIZAÇÃO MENSAL ---
 st.markdown("### 📅 Lançamentos Mensais")
 mes_selecionado = st.selectbox("Selecione o mês para visualizar/editar:", lista_meses)
 
 df_atual = st.session_state["financas_data"]["meses"][mes_selecionado]
 
-# Garantir tipos numéricos para os totais do mês
-total_entradas_mes = pd.to_numeric(df_atual["Entradas"]).sum() if not df_atual.empty else 0.0
-total_saidas_mes = pd.to_numeric(df_atual["Saídas"]).sum() if not df_atual.empty else 0.0
-saldo_mes = total_entradas_mes - total_saidas_mes
-
-col_mes_totais = st.columns(3)
-col_mes_totais[0].metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
-col_mes_totais[1].metric("Saídas do Mês", f"R$ {total_saidas_mes:,.2f}")
-col_mes_totais[2].metric("Balanço do Mês", f"R$ {saldo_mes:,.2f}")
-
 st.write("")
 st.markdown(f"**Tabela de Movimentações - {mes_selecionado}**")
 
 if is_master:
-    # O num_rows="dynamic" agora vai funcionar porque o DataFrame original está livre
+    # O próprio Streamlit salva no session_state usando a chave key sem precisar de st.rerun
     df_editado = st.data_editor(
         df_atual,
         hide_index=True,
@@ -116,12 +60,10 @@ if is_master:
             "Motivo": st.column_config.TextColumn("Motivo/Descrição", required=True)
         },
         disabled=False,
-        key=f"editor_{mes_selecionado}"
+        key=f"editor_dados_{mes_selecionado}"
     )
-    
-    if not df_editado.equals(df_atual):
-        st.session_state["financas_data"]["meses"][mes_selecionado] = df_editado
-        st.rerun()
+    # Atualiza o estado global com os dados editados da tabela
+    st.session_state["financas_data"]["meses"][mes_selecionado] = df_editado
 else:
     st.dataframe(
         df_atual,
@@ -134,24 +76,44 @@ else:
         }
     )
 
-# --- 3. RECURSO DE RELATÓRIO IMPRESSO ---
+# --- CÁLCULO E AGREGAÇÃO DOS TOTAIS RECALCULADOS EM TEMPO REAL ---
+total_entradas_geral = 0.0
+total_saidas_geral = 0.0
+
+for m in lista_meses:
+    df_m = st.session_state["financas_data"]["meses"][m]
+    if df_m is not None and not df_m.empty:
+        total_entradas_geral += pd.to_numeric(df_m["Entradas"], errors='coerce').fillna(0).sum()
+        total_saidas_geral += pd.to_numeric(df_m["Saídas"], errors='coerce').fillna(0).sum()
+
+saldo_anterior = st.session_state["financas_data"]["saldo_anterior"]
+saldo_gestao = total_entradas_geral - total_saidas_geral
+saldo_total = saldo_anterior + saldo_gestao
+
+# Totais específicos do mês selecionado
+total_entradas_mes = pd.to_numeric(df_editado["Entradas"], errors='coerce').fillna(0).sum() if is_master else pd.to_numeric(df_atual["Entradas"], errors='coerce').fillna(0).sum()
+total_saidas_mes = pd.to_numeric(df_editado["Saídas"], errors='coerce').fillna(0).sum() if is_master else pd.to_numeric(df_atual["Saídas"], errors='coerce').fillna(0).sum()
+saldo_mes = total_entradas_mes - total_saidas_mes
+
+# --- EXIBIÇÃO DE MÉTRICAS ABAIXO DA TABELA PARA EVITAR CONFLITO DE RECARREGAMENTO ---
+st.write("---")
+st.markdown(f"### 📊 Resumo do Mês Selecionado ({mes_selecionado})")
+col_mes = st.columns(3)
+col_mes.metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
+col_mes.metric("Saídas do Mês", f"R$ {total_saidas_mes:,.2f}")
+col_mes.metric("Balanço do Mês", f"R$ {saldo_mes:,.2f}")
+
+st.write("---")
+st.markdown("### 📊 Resumo Consolidado Geral")
 if is_master:
-    st.write("---")
-    st.markdown("### 🖨️ Relatórios do Sistema")
-    if st.button("Gerar Relatório de Impressão"):
-        st.success("Relatório preparado com sucesso! Utilize a função de impressão do seu navegador (Ctrl+P).")
-        
-        st.markdown("## RELATÓRIO CONSOLIDADO DE CAIXA - ARO")
-        st.markdown(f"**Data de Emissão:** {datetime.date.today().strftime('%d/%m/%Y')}")
-        st.write(f"**Saldo Anterior:** R$ {saldo_anterior:,.2f}")
-        st.write(f"**Total de Entradas (Período):** R$ {total_entradas_geral:,.2f}")
-        st.write(f"**Total de Saídas (Período):** R$ {total_saidas_geral:,.2f}")
-        st.write(f"**Saldo Total Acumulado:** R$ {saldo_total:,.2f}")
-        st.write("---")
-        
-        for m in lista_meses:
-            df_m = st.session_state["financas_data"]["meses"][m]
-            if not df_m.empty:
-                st.markdown(f"### Mês: {m}")
-                st.table(df_m)
-                st.markdown("<div style='page-break-after: always;'></div>", unsafe_allow_html=True)
+    novo_saldo_anterior = st.number_input("Saldo Anterior (R$)", value=float(saldo_anterior), step=100.0, key="edit_saldo_ant")
+    if novo_saldo_anterior != saldo_anterior:
+        st.session_state["financas_data"]["saldo_anterior"] = novo_saldo_anterior
+else:
+    st.metric(label="Saldo Anterior", value=f"R$ {saldo_anterior:,.2f}")
+
+col_finais = st.columns(4)
+col_finais.metric("Total de Entradas", f"R$ {total_entradas_geral:,.2f}")
+col_finais.metric("Total de Saídas", f"R$ {total_saidas_geral:,.2f}")
+col_finais.metric("Saldo (Gestão)", f"R$ {saldo_gestao:,.2f}")
+col_finais.metric("Saldo Total", f"R$ {saldo_total:,.2f}")
