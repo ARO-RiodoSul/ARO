@@ -2,19 +2,32 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
+# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
 
+# FORÇAR A LOGO ANDROID/IPHONE
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"><meta name="apple-mobile-web-app-title" content="ARO"><meta name="application-name" content="ARO"></head>""", unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
+# --- TELA DE LOGIN PROTEGIDA (BLINDADA CONTRA QUEDAS DE IMAGEM) ---
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"): st.columns(3).image("logo.png", use_container_width=True)
-    else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    
+    try:
+        if os.path.exists("logo.png"):
+            col_l1, col_l2, col_l3 = st.columns(3)
+            col_l2.image("logo.png", use_container_width=True)
+        else:
+            st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    except:
+        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+        
+    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
     with st.form("t_login"):
-        u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
+        u = st.text_input("Usuário")
+        s = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
             if u == "Junior Rebelo" and s == "270688": st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
             elif u == "Kleven" and s == "12345678": st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
@@ -22,10 +35,8 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 if "dados_socios_internos" not in st.session_state:
-    if os.path.exists("backup_socios.csv"):
-        st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv")
-    else:
-        st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+    if os.path.exists("backup_socios.csv"): st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv")
+    else: st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
 
 lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
@@ -55,7 +66,9 @@ def gerar_relatorio_texto():
 
 if st.session_state["tela_atual"] == "menu":
     c_l, c_t, c_o = st.columns(3)
-    if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
+    try:
+        if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
+    except: pass
     c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     if c_o.button("🔒 Sair"): st.session_state["autenticado"] = False; st.rerun()
     st.markdown("---")
@@ -116,7 +129,8 @@ elif st.session_state["tela_atual"] == "caixa":
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
                     pickle.dump(st.session_state["dados_meses_financeiros"], open("backup_financas.pkl", "wb"))
                     st.toast("💾 Salvo!"); st.rerun()
-    else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
+    else:
+        st.dataframe(df_m_at, use_container_width=True, hide_index=True)
     st.markdown("---")
     m_e = pd.to_numeric(df_m_at["Entradas"], errors='coerce').sum()
     m_s = pd.to_numeric(df_m_at["Saídas"], errors='coerce').sum()
