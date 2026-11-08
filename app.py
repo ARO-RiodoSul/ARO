@@ -12,7 +12,16 @@ st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/st
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
+# MÓDULOS DE NAVEGAÇÃO INTERNA CONTROLANDO AS ABAS LATERAIS
+login_page = st.Page("app.py", title="🔑 Área de Acesso", icon="🔒")
+pag_socios = st.Page("pages/1_Socios.py", title="👥 Sócios", icon="👥")
+pag_financas = st.Page("pages/2_Financas.py", title="💰 Finanças", icon="💰")
+pag_torneios = st.Page("pages/3_Torneios.py", title="🦅 Torneios", icon="🦅")
+
+# REGRA DE SEGURANÇA: Se não estiver logado, esconde a barra lateral e roda apenas a tela de login
 if not st.session_state["autenticado"]:
+    pg = st.navigation([login_page], position="hidden")
+    
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
         _, col_img, _ = st.columns(3)
@@ -35,6 +44,15 @@ if not st.session_state["autenticado"]:
                 st.error("Usuário ou senha incorretos.")
     st.stop()
 
+# SE ESTIVER AUTENTICADO: O Streamlit monta a navegação lateral com as páginas da pasta /pages
+else:
+    pg = st.navigation({
+        "Início": [login_page],
+        "Módulos do Sistema": [pag_socios, pag_financas, pag_torneios]
+    })
+    # Executa a navegação de forma nativa e segura
+    pg.run()
+
 # --- CRONOLOGIA DOS MESES ---
 lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
@@ -54,23 +72,27 @@ if "dados_torneios_internos" not in st.session_state:
     st.session_state["dados_torneios_internos"] = pickle.load(open("backup_torneios_v2.pkl", "rb")) if os.path.exists("backup_torneios_v2.pkl") else pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
 
 if "data_torneio_aro" not in st.session_state:
-    st.session_state["data_torneio_aro"] = open("backup_data_torneio.txt", "r").read() if os.path.exists("backup_data_torneio.txt") else "08/11/2026"
+    try:
+        st.session_state["data_torneio_aro"] = open("backup_data_torneio.txt", "r").read() if os.path.exists("backup_data_torneio.txt") else "08/11/2026"
+    except:
+        st.session_state["data_torneio_aro"] = "08/11/2026"
 
-# --- TELA: MENU PRINCIPAL / CAPA INTERNA ---
-c_l, c_t, c_o = st.columns(3)
-try:
-    if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
-except: pass
+# --- CONTEÚDO DA TELA INICIAL (RENDERIZADO APENAS SE ESTIVER NA PÁGINA CENTRAL) ---
+# Importante: Como st.navigation gerencia a tela, garantimos que a capa só apareça na página 'app.py'
+if st.experimental_get_query_params() == {} or "page" not in st.experimental_get_query_params():
+    c_l, c_t, c_o = st.columns([1, 4, 1])
+    try:
+        if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
+    except: pass
 
-c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-if c_o.button("🔒 Sair do Painel"):
-    st.session_state["autenticado"] = False
-    st.rerun()
+    c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    if c_o.button("🔒 Sair do Painel", use_container_width=True):
+        st.session_state["autenticado"] = False
+        st.rerun()
 
-st.markdown("---")
-st.info("⭐ Modo Administrador: Acesso Master Ativado" if st.session_state["user_role"] == "master" else "ℹ️ Modo de Leitura: Acesso de Consulta Ativado")
+    st.markdown("---")
+    st.info("⭐ Modo Administrador: Acesso Master Ativado" if st.session_state["user_role"] == "master" else "ℹ️ Modo de Leitura: Acesso de Consulta Ativado")
 
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda do seu navegador ou celular para navegar entre as planilhas de Sócios, Finanças e Torneios de forma independente.</p>", unsafe_allow_html=True)
-
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda do seu navegador ou celular para navegar entre as planilhas de Sócios, Finanças e Torneios de forma independente.</p>", unsafe_allow_html=True)
