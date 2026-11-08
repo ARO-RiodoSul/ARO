@@ -26,7 +26,8 @@ if not st.session_state["autenticado"]:
         col_l2.image("logo.png", use_container_width=True)
     else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
-        u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
+        u = st.text_input("Usuário")
+        s = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
             if u == "Junior Rebelo" and s == "270688": st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
             elif u == "Kleven" and s == "12345678": st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
@@ -42,11 +43,14 @@ if "dados_socios_internos" not in st.session_state:
             {"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)
         ])
 
-# --- 2. CRONOLOGIA FINANCEIRA ---
-lista_meses = ["Dezembro 2026"]
-for ano in:
-    for mes in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]:
-        lista_meses.append(f"{mes} {ano}")
+# --- 2. CRONOLOGIA FINANCEIRA DIRETAMENTE DECLARADA (SEM ERROS DE COMPILAÇÃO) ---
+lista_meses = [
+    "Dezembro 2026", 
+    "Janeiro 2027", "Fevereiro 2027", "Março 2027", "Abril 2027", "Maio 2027", "Junho 2027", 
+    "Julho 2027", "Agosto 2027", "Setembro 2027", "Outubro 2027", "Novembro 2027", "Dezembro 2027",
+    "Janeiro 2028", "Fevereiro 2028", "Março 2028", "Abril 2028", "Maio 2028", "Junho 2028", 
+    "Julho 2028", "Agosto 2028", "Setembro 2028", "Outubro 2028", "Novembro 2028", "Dezembro 2028"
+]
 
 if "saldo_anterior_master" not in st.session_state:
     if os.path.exists("backup_saldo_ant.txt"):
@@ -105,7 +109,6 @@ elif st.session_state["tela_atual"] == "socios":
             st.toast("💾 Salvo automaticamente!")
             st.rerun()
             
-        # BOTÃO CONSECUTIVO DE ADIÇÃO DE LINHAS (21, 22, 23...)
         if st.button("➕ Adicionar Linha para Novo Sócio", type="secondary"):
             proximo_num = len(st.session_state["dados_socios_internos"]) + 1
             nova_linha = pd.DataFrame([{"Número": proximo_num, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"}])
@@ -153,5 +156,3 @@ elif st.session_state["tela_atual"] == "caixa":
             with st.form("f_ex", clear_on_submit=True):
                 cd, ce, cs, cm = st.columns(4)
                 d_x = cd.number_input("Dia", min_value=1, max_value=31, value=1)
-                e_x, s_x, m_x = ce.number_input("Entrada", min_value=0.0, format="%.2f"), cs.number_input("Saída", min_value=0.0, format="%.2f"), cm.text_input("Motivo")
-                if st.form_submit_button("Injetar") and (e_x > 0 or s_x > 0):
