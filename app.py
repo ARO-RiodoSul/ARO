@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import os
+import os, pickle
 
 # CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="📊", layout="wide")
@@ -18,7 +18,7 @@ if not st.session_state["autenticado"]:
         col_logo_meio.image("logo.png", use_container_width=True)
     else:
         st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #6B7280; font-family: sans-serif;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #9CA3AF;'>Insira suas credenciais abaixo para acessar o sistema.</p>", unsafe_allow_html=True)
     st.markdown("---")
     with st.form("tela_login"):
@@ -36,28 +36,37 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ==============================================================================
-# PAINEL INTERNO (APÓS LOGIN)
+# PAINEL INTERNO & SISTEMA DE SALVAMENTO AUTOMÁTICO
 # ==============================================================================
 if "tela_atual" not in st.session_state:
     st.session_state["tela_atual"] = "menu"
 
-# 1. MEMÓRIA DOS SÓCIOS (1 A 100)
+# 1. CARREGAMENTO DOS SÓCIOS PERMANENTES
 if "dados_socios_internos" not in st.session_state:
-    st.session_state["dados_socios_internos"] = pd.DataFrame([
-        {"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)
-    ])
+    if os.path.exists("backup_socios.csv"):
+        st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv")
+    else:
+        st.session_state["dados_socios_internos"] = pd.DataFrame([
+            {"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)
+        ])
 
-# 2. LISTA DE MESES (DEZ 2026 - DEZ 2028)
-lista_meses_completa = ["Dezembro 2026"] + [f"{m} {a}" for a in [2027, 2028] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
+# 2. CRONOLOGIA DOS MESES
+lista_meses_completa = ["Dezembro 2026"] + [f"{m} {a}" for a in for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
 
-# 3. BANCO DE DADOS FINANCEIRO INTERNO
+# 3. CARREGAMENTO DAS FINANÇAS PERMANENTES
 if "saldo_anterior_master" not in st.session_state:
-    st.session_state["saldo_anterior_master"] = 0.0
+    if os.path.exists("backup_saldo_ant.txt"):
+        with open("backup_saldo_ant.txt", "r") as f: st.session_state["saldo_anterior_master"] = float(f.read())
+    else:
+        st.session_state["saldo_anterior_master"] = 0.0
 
 if "dados_meses_financeiros" not in st.session_state:
-    st.session_state["dados_meses_financeiros"] = {
-        m_ref: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m_ref in lista_meses_completa
-    }
+    if os.path.exists("backup_financas.pkl"):
+        with open("backup_financas.pkl", "rb") as f: st.session_state["dados_meses_financeiros"] = pickle.load(f)
+    else:
+        st.session_state["dados_meses_financeiros"] = {
+            m_ref: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m_ref in lista_meses_completa
+        }
 
 # MATEMÁTICA FINANCEIRA GLOBAL
 total_entradas_global = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Entradas"], errors='coerce').sum() for m in lista_meses_completa)
@@ -67,7 +76,7 @@ saldo_total_global = total_entradas_global + st.session_state["saldo_anterior_ma
 
 # --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
-    col_logo, col_titulo, col_logout = st.columns([1, 4, 1])
+    col_logo, col_titulo, col_logout = st.columns()
     if os.path.exists("logo.png"): col_logo.image("logo.png", width=80)
     col_titulo.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     if col_logout.button("🔒 Sair"):
@@ -97,7 +106,11 @@ elif st.session_state["tela_atual"] == "socios":
     st.title("👥 Controle de Sócios")
     st.markdown("---")
     if st.session_state["user_role"] == "master":
-        st.session_state["dados_socios_internos"] = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"], required=True)}, hide_index=True)
+        df_modificado = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"], required=True)}, hide_index=True)
+        if not df_modificado.equals(st.session_state["dados_socios_internos"]):
+            st.session_state["dados_socios_internos"] = df_modificado
+            df_modificado.to_csv("backup_socios.csv", index=False)
+            st.toast("💾 Alterações salvas automaticamente!")
     else:
         st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
 
@@ -110,16 +123,18 @@ elif st.session_state["tela_atual"] == "caixa":
     st.title("🪙 Controle Financeiro - Finanças")
     st.markdown("---")
     
-    # 1. Topo: Saldo Anterior
-    _, col_anterior_meio, _ = st.columns([1, 2, 1])
+    _, col_anterior_meio, _ = st.columns(3)
     with col_anterior_meio:
         st.markdown("<h3 style='text-align: center;'>🏦 Saldo Anterior</h3>", unsafe_allow_html=True)
         if st.session_state["user_role"] == "master":
-            st.session_state["saldo_anterior_master"] = st.number_input("Editar Valor", value=st.session_state["saldo_anterior_master"], step=50.0, format="%.2f", label_visibility="collapsed")
+            novo_val = st.number_input("Editar Valor", value=st.session_state["saldo_anterior_master"], step=50.0, format="%.2f", label_visibility="collapsed")
+            if novo_val != st.session_state["saldo_anterior_master"]:
+                st.session_state["saldo_anterior_master"] = novo_val
+                with open("backup_saldo_ant.txt", "w") as f: f.write(str(novo_val))
+                st.rerun()
         else:
             st.markdown(f"<h4 style='text-align: center; color: #1E3A8A;'>R$ {st.session_state['saldo_anterior_master']:,.2f}</h4>", unsafe_allow_html=True)
             
-    # 2. Meio e Base: Métricas Financeiras
     st.markdown("<br>", unsafe_allow_html=True)
     c_m1, c_m2 = st.columns(2)
     c_m1.metric("🟢 Total de Entradas", f"R$ {total_entradas_global:,.2f}")
@@ -131,7 +146,6 @@ elif st.session_state["tela_atual"] == "caixa":
     c_b2.metric("💰 Saldo (Total)", f"R$ {saldo_total_global:,.2f}")
     st.markdown("---")
     
-    # Seleção de Meses e Lançamentos
     mes_selecionado = st.selectbox("📅 Selecione o Mês de Trabalho:", lista_meses_completa)
     st.markdown(f"### 🗓️ Lançamentos Diários: {mes_selecionado}")
     
@@ -147,7 +161,11 @@ elif st.session_state["tela_atual"] == "caixa":
                 "Motivo": st.column_config.TextColumn("Motivo / Descrição")
             }
         )
-        st.session_state["dados_meses_financeiros"][mes_selecionado] = df_mes_editado
+        if not df_mes_editado.equals(df_mes_ativo):
+            st.session_state["dados_meses_financeiros"][mes_selecionado] = df_mes_editado
+            with open("backup_financas.pkl", "wb") as f: pickle.dump(st.session_state["dados_meses_financeiros"], f)
+            st.toast("💾 Lançamento salvo!")
+            st.rerun()
         
         with st.expander("➕ Criar Linha Dupla / Extra para o mesmo Dia"):
             with st.form(f"f_ex_{mes_selecionado}", clear_on_submit=True):
@@ -157,18 +175,9 @@ elif st.session_state["tela_atual"] == "caixa":
                 s_ex = c_s.number_input("Saída (R$)", min_value=0.0, format="%.2f")
                 m_ex = c_m.text_input("Motivo")
                 if st.form_submit_button("Inserir Linha Extra") and (e_ex > 0 or s_ex > 0):
-                    st.session_state["dados_meses_financeiros"][mes_selecionado] = pd.concat([df_mes_editado, pd.DataFrame([{"Dia": d_ex, "Entradas": e_ex, "Saídas": s_ex, "Motivo": m_ex}])], ignore_index=True)
-                    st.slots = st.success("Linha adicionada!")
+                    df_nova = pd.DataFrame([{"Dia": d_ex, "Entradas": e_ex, "Saídas": s_ex, "Motivo": m_ex}])
+                    st.session_state["dados_meses_financeiros"][mes_selecionado] = pd.concat([df_mes_editado, df_nova], ignore_index=True)
+                    with open("backup_financas.pkl", "wb") as f: pickle.dump(st.session_state["dados_meses_financeiros"], f)
+                    st.toast("💾 Linha extra salva!")
                     st.rerun()
     else:
-        st.dataframe(df_mes_ativo, use_container_width=True, hide_index=True)
-
-    # Fechamento e Somas do Mês Selecionado
-    st.markdown("---")
-    m_ent = pd.to_numeric(df_mes_ativo["Entradas"], errors='coerce').sum()
-    m_sai = pd.to_numeric(df_mes_ativo["Saídas"], errors='coerce').sum()
-    
-    col_t1, col_t2, col_t3 = st.columns(3)
-    col_t1.markdown(f"📊 **Total Entradas do Mês:** R$ {m_ent:,.2f}")
-    col_t2.markdown(f"📊 **Total Saídas do Mês:** R$ {m_sai:,.2f}")
-    col_t3.markdown(f"📉 **Saldo Líquido do Mês:** R$ {(m_ent - m_sai):,.2f}")
