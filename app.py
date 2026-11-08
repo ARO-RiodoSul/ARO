@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
-# CONFIGURAÇÃO DA PÁGINA (Agora apontando a logo.png como o ícone oficial do App)
+# CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(
     page_title="Painel - ARO Rio do Sul", 
     page_icon="logo.png" if os.path.exists("logo.png") else "📊", 
@@ -12,18 +12,34 @@ st.set_page_config(
 if "autenticado" not in st.session_state:
     st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
+# --- TELA DE LOGIN (CAPA) ---
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"): st.columns(3).image("logo.png", use_container_width=True)
-    else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"):
+        col_l1, col_l2, col_l3 = st.columns(3)
+        col_l2.image("logo.png", use_container_width=True)
+    else:
+        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #6B7280;'>ARO - Rio do Sul</h3>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #9CA3AF;'>Insira suas credenciais abaixo para acessar o sistema.</p>", unsafe_allow_html=True)
+    st.markdown("---")
     with st.form("t_login"):
-        u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
+        u = st.text_input("Usuário")
+        s = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
-            if u == "Junior Rebelo" and s == "270688": st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
-            elif u == "Kleven" and s == "12345678": st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
-            else: st.error("Incorreto.")
+            if u == "Junior Rebelo" and s == "270688":
+                st.session_state.update({"autenticado": True, "user_role": "master"})
+                st.rerun()
+            elif u == "Kleven" and s == "12345678":
+                st.session_state.update({"autenticado": True, "user_role": "leitor"})
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos.")
     st.stop()
 
+# ==============================================================================
+# PAINEL INTERNO & SISTEMA DE SALVAMENTO AUTOMÁTICO
+# ==============================================================================
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)])
 
@@ -71,6 +87,7 @@ def gerar_relatorio_texto():
     txt += f"💰 Saldo (Total): R$ {s_tot:.2f}\n"
     return txt
 
+# --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
     c_l, c_t, c_o = st.columns(3)
     if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
@@ -81,14 +98,20 @@ if st.session_state["tela_atual"] == "menu":
     if cb1.button("👥 Sócios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "socios"; st.rerun()
     if cb2.button("🪙 Finanças", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "caixa"; st.rerun()
 
+# --- TELA 2: SÓCIOS ---
 elif st.session_state["tela_atual"] == "socios":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("👥 Controle de Sócios")
     if st.session_state["user_role"] == "master":
         df_m = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"])}, hide_index=True)
-        if not df_m.equals(st.session_state["dados_socios_internos"]): st.session_state["dados_socios_internos"] = df_m; df_m.to_csv("backup_socios.csv", index=False); st.toast("💾 Salvo!"); st.rerun()
+        if not df_m.equals(st.session_state["dados_socios_internos"]): 
+            st.session_state["dados_socios_internos"] = df_m
+            df_m.to_csv("backup_socios.csv", index=False)
+            st.toast("💾 Salvo!")
+            st.rerun()
     else: st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
 
+# --- TELA 3: FINANÇAS ---
 elif st.session_state["tela_atual"] == "caixa":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("🪙 Controle Financeiro - Finanças")
@@ -101,7 +124,10 @@ elif st.session_state["tela_atual"] == "caixa":
         st.markdown("<h3 style='text-align: center;'>🏦 Saldo Anterior</h3>", unsafe_allow_html=True)
         if st.session_state["user_role"] == "master":
             n_v = st.number_input("Editar", value=st.session_state["saldo_anterior_master"], format="%.2f", label_visibility="collapsed")
-            if n_v != st.session_state["saldo_anterior_master"]: st.session_state["saldo_anterior_master"] = n_v; open("backup_saldo_ant.txt", "w").write(str(n_v)); st.rerun()
+            if n_v != st.session_state["saldo_anterior_master"]: 
+                st.session_state["saldo_anterior_master"] = n_v
+                open("backup_saldo_ant.txt", "w").write(str(n_v))
+                st.rerun()
         else: st.markdown(f"<h4 style='text-align: center;'>R$ {st.session_state['saldo_anterior_master']:,.2f}</h4>", unsafe_allow_html=True)
             
     st.markdown("<br>", unsafe_allow_html=True)
@@ -132,9 +158,3 @@ elif st.session_state["tela_atual"] == "caixa":
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
                     with open("backup_financas.pkl", "wb") as f: pickle.dump(st.session_state["dados_meses_financeiros"], f)
                     st.toast("💾 Salvo!"); st.rerun()
-    else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-    m_e = pd.to_numeric(df_m_at["Entradas"], errors='coerce').sum()
-    m_s = pd.to_numeric(df_m_at["Saídas"], errors='coerce').sum()
-    st.write(f"📊 **Mês Atual - Entradas:** R$ {m_e:,.2f} | **Saídas:** R$ {m_s:,.2f} | **Líquido:** R$ {(m_e - m_s):,.2f}")
