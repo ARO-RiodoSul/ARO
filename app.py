@@ -13,8 +13,11 @@ if "autenticado" not in st.session_state:
 
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"): st.columns(3).image("logo.png", use_container_width=True)
-    else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"):
+        _, col_img, _ = st.columns(3)
+        col_img.image("logo.png", use_container_width=True)
+    else:
+        st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
         u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
@@ -38,7 +41,6 @@ if "saldo_anterior_master" not in st.session_state:
 if "dados_meses_financeiros" not in st.session_state:
     st.session_state["dados_meses_financeiros"] = pickle.load(open("backup_financas.pkl", "rb")) if os.path.exists("backup_financas.pkl") else {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
 
-# MEMÓRIA PERMANENTE DO NOVO MÓDULO DE TORNEIOS
 if "dados_torneios_internos" not in st.session_state:
     st.session_state["dados_torneios_internos"] = pickle.load(open("backup_torneios.pkl", "rb")) if os.path.exists("backup_torneios.pkl") else pd.DataFrame(columns=["Torneio / Etapa", "ID Sócio", "Nome do Atleta", "Anilha da Ave", "Valor Inscrição", "Status Pagamento"])
 
@@ -129,3 +131,4 @@ elif st.session_state["tela_atual"] == "caixa":
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
                     pickle.dump(st.session_state["dados_meses_financeiros"], open("backup_financas.pkl", "wb"))
                     st.toast("💾 Salvo!"); st.rerun()
+    else: 
