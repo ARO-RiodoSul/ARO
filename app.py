@@ -9,7 +9,7 @@ if "autenticado" not in st.session_state:
 
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"): st.columns(3).image("logo.png", use_container_width=True)
+    if os.path.exists("logo.png"): st.columns(3)[1].image("logo.png", use_container_width=True)
     else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
         u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
@@ -22,7 +22,11 @@ if not st.session_state["autenticado"]:
 if "dados_socios_internos" not in st.session_state:
     st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 101)])
 
-lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
+# CORREÇÃO DA SINTAXE DA LISTA DE MESES
+lista_meses = ["Dezembro 2026"]
+for a in:
+    for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]:
+        lista_meses.append(f"{m} {a}")
 
 if "saldo_anterior_master" not in st.session_state:
     if os.path.exists("backup_saldo_ant.txt"):
@@ -40,7 +44,6 @@ t_sai = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Saída
 s_ges = t_ent - t_sai
 s_tot = t_ent + st.session_state["saldo_anterior_master"] - t_sai
 
-# --- FUNÇÃO GERADORA DE TEXTO FORMATADO PARA PDF ---
 def gerar_relatorio_texto():
     txt = "========================================================\n"
     txt += "        RELATÓRIO FINANCEIRO COMPLETO - ARO RIO DO SUL\n"
@@ -48,17 +51,13 @@ def gerar_relatorio_texto():
     for m in lista_meses:
         df_m_p = st.session_state["dados_meses_financeiros"][m]
         df_at = df_m_p[(df_m_p["Entradas"] > 0) | (df_m_p["Saídas"] > 0) | (df_m_p["Motivo"] != "")]
-        m_e = pd.to_numeric(df_m_p["Entradas"], errors='coerce').sum()
-        m_s = pd.to_numeric(df_m_p["Saídas"], errors='coerce').sum()
-        
+        m_e, m_s = pd.to_numeric(df_m_p["Entradas"], errors='coerce').sum(), pd.to_numeric(df_m_p["Saídas"], errors='coerce').sum()
         txt += f"--------- PERÍODO: {m} ---------\n"
         if not df_at.empty:
             for _, r in df_at.iterrows():
                 txt += f"Dia {int(r['Dia'])} | Entrada: R$ {r['Entradas']:.2f} | Saída: R$ {r['Saídas']:.2f} | Motivo: {r['Motivo']}\n"
-        else:
-            txt += "Nenhum lançamento ativo neste mês.\n"
+        else: txt += "Nenhum lançamento ativo neste mês.\n"
         txt += f"TOTAL ENTRADAS: R$ {m_e:.2f} | TOTAL SAÍDAS: R$ {m_s:.2f} | LÍQUIDO: R$ {(m_e - m_s):.2f}\n\n"
-    
     txt += "========================================================\n"
     txt += "               FECHAMENTO CONSOLIDADO\n"
     txt += "========================================================\n"
@@ -69,9 +68,8 @@ def gerar_relatorio_texto():
     txt += f"💰 Saldo (Total): R$ {s_tot:.2f}\n"
     return txt
 
-# --- NAVEGAÇÃO DO APLICATIVO ---
 if st.session_state["tela_atual"] == "menu":
-    c_l, c_t, c_o = st.columns()
+    c_l, c_t, c_o = st.columns([1, 4, 1])
     if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
     c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     if c_o.button("🔒 Sair"): st.session_state["autenticado"] = False; st.rerun()
@@ -92,17 +90,8 @@ elif st.session_state["tela_atual"] == "caixa":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("🪙 Controle Financeiro - Finanças")
     
-    # BOTÃO EXCLUSIVO MASTER PARA EXPORTAR RELATÓRIO EM ARQUIVO DIRETO
     if st.session_state["user_role"] == "master":
-        dados_relatorio = gerar_relatorio_texto()
-        st.download_button(
-            label="📥 Gerar e Baixar Relatório Financeiro (.txt / .pdf)",
-            data=dados_relatorio,
-            file_name="relatorio_financeiro_aro.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
-        st.info("💡 Nota: O arquivo será baixado de forma limpa. Para salvá-lo como PDF no celular ou computador, basta abrir o arquivo baixado e escolher 'Salvar como PDF'.")
+        st.download_button(label="📥 Baixar Relatório Financeiro Geral", data=gerar_relatorio_texto(), file_name="relatorio_financeiro_aro.txt", mime="text/plain", use_container_width=True)
             
     _, c_ant, _ = st.columns(3)
     with c_ant:
@@ -135,9 +124,7 @@ elif st.session_state["tela_atual"] == "caixa":
             with st.form("f_ex", clear_on_submit=True):
                 cd, ce, cs, cm = st.columns(4)
                 d_x = cd.number_input("Dia", min_value=1, max_value=31, value=1)
-                e_x = ce.number_input("Entrada", min_value=0.0, format="%.2f")
-                s_x = cs.number_input("Saída", min_value=0.0, format="%.2f")
-                m_x = cm.text_input("Motivo")
+                e_x, s_x, m_x = ce.number_input("Entrada", min_value=0.0, format="%.2f"), cs.number_input("Saída", min_value=0.0, format="%.2f"), cm.text_input("Motivo")
                 if st.form_submit_button("Inserir") and (e_x > 0 or s_x > 0):
                     st.session_state["dados_meses_financeiros"][m_sel] = pd.concat([df_m_ed, pd.DataFrame([{"Dia": d_x, "Entradas": e_x, "Saídas": s_x, "Motivo": m_x}])], ignore_index=True)
                     with open("backup_financas.pkl", "wb") as f: pickle.dump(st.session_state["dados_meses_financeiros"], f)
