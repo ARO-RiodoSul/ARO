@@ -74,13 +74,12 @@ for i, esp in enumerate(especies_validas):
         if df_f.empty:
             st.caption("Nenhum pássaro cadastrado nesta categoria.")
         else:
-            # Exibição segura garantindo suporte à coluna Clube nas abas
             df_mostrar = df_f.copy()
             if "Clube" not in df_mostrar.columns:
                 df_mostrar["Clube"] = "ARO"
             st.dataframe(df_mostrar.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
-# --- 5. EMISSÃO DE PDF ADESIVO P&B COM DATA E CLUBE ---
+# --- 5. EMISSÃO DE PDF ADESIVO P&B COM DATA, CLUBE E PROPRIETÁRIO ---
 def gerar_pdf_fichas(df_dados, data_evento):
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
@@ -112,12 +111,11 @@ def gerar_pdf_fichas(df_dados, data_evento):
         # Informações da Ave com Fonte Expandida (Preenchendo o espaço)
         pdf.setFont("Helvetica-Bold", 10.5)
         pdf.drawString(px + 12, py + altura_f - 71, "AVE:")
-        pdf.drawString(px + 12, py + altura_f - 86, "CRIADOR:")
+        pdf.drawString(px + 12, py + altura_f - 86, "PROPRIETÁRIO:") # AJUSTADO: Criador substituído por Proprietário
         pdf.drawString(px + 12, py + altura_f - 101, "ANILHA:")
         pdf.drawString(px + 12, py + altura_f - 116, "CLUBE:")
         pdf.drawString(px + 12, py + altura_f - 131, "ESPÉCIE:")
         
-        # CORREÇÃO SEGURA: Tratamento com .get() para evitar o KeyError em dados antigos
         clube_val = r.get('Clube', 'ARO')
         if pd.isna(clube_val) or str(clube_val).strip() == "":
             clube_val = "ARO"
@@ -128,7 +126,7 @@ def gerar_pdf_fichas(df_dados, data_evento):
         
         pdf.setFont("Helvetica", 10.5)
         pdf.drawString(px + 45, py + altura_f - 71, str(r['Nome da Ave']))
-        pdf.drawString(px + 75, py + altura_f - 86, str(r['Proprietário']))
+        pdf.drawString(px + 105, py + altura_f - 86, str(r['Proprietário'])) # Recuo do texto expandido para alinhar perfeitamente
         pdf.drawString(px + 68, py + altura_f - 101, str(r['Anilha']))
         pdf.drawString(px + 65, py + altura_f - 116, str(clube_val).upper())
         pdf.drawString(px + 75, py + altura_f - 131, str(r['Espécie']).upper())
