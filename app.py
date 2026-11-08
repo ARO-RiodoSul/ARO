@@ -124,42 +124,43 @@ if role == "master":
     col_cad_1, col_cad_2 = st.columns(2)
     
     with col_cad_1:
-        st.markdown("**Cadastrar Novo Usuário**")
-        novo_u = st.text_input("Nome de Usuário (Login):", key="input_u")
-        novo_s = st.text_input("Senha de Acesso:", type="password", key="input_s")
-        tipo_role = st.selectbox("Categoria/Nível:", ["Sócio", "Visitante"], key="select_role")
-        
-        # Puxa os nomes da planilha de sócios de forma limpa para preenchimento
-        socio_vinc = "Nenhum"
-        if tipo_role == "Sócio":
-            lista_nomes_socios = ["Selecione o Sócio..."]
-            if not df_socios_global.empty and "Nome" in df_socios_global.columns:
-                nomes_validos = df_socios_global["Nome"].dropna().str.strip().tolist()
-                lista_nomes_socios.extend([x for x in nomes_validos if x != ""])
+        # CORREÇÃO CHAVE: Todo o formulário foi colocado dentro do bloco 'with st.form'
+        with st.form("form_cadastrar_usuario", clear_on_submit=True):
+            st.markdown("**Cadastrar Novo Usuário**")
+            novo_u = st.text_input("Nome de Usuário (Login):")
+            novo_s = st.text_input("Senha de Acesso:", type="password")
+            tipo_role = st.selectbox("Categoria/Nível:", ["Sócio", "Visitante"])
             
-            socio_vinc = st.selectbox("Vincular Sócio Oficial:", lista_nomes_socios, key="select_vinc")
-            
-        if st.button("Salvar Novo Usuário", use_container_width=True):
-            if novo_u.strip() and novo_s.strip():
-                if novo_u.strip() in ["Junior Rebelo", "Kleven", "Valter", "Peterson", "Mauro", "Vanderlei"]:
-                    st.error("Este nome de usuário é reservado para a administração fixa!")
-                elif tipo_role == "Sócio" and socio_vinc == "Selecione o Sócio...":
-                    st.error("Por favor, selecione qual sócio oficial será vinculado a este login!")
+            socio_vinc = "Nenhum"
+            if tipo_role == "Sócio":
+                lista_nomes_socios = ["Selecione o Sócio..."]
+                if not df_socios_global.empty and "Nome" in df_socios_global.columns:
+                    nomes_validos = df_socios_global["Nome"].dropna().str.strip().tolist()
+                    lista_nomes_socios.extend([x for x in nomes_validos if x != ""])
+                
+                socio_vinc = st.selectbox("Vincular Sócio Oficial:", lista_nomes_socios)
+                
+            if st.form_submit_button("Salvar Novo Usuário", use_container_width=True):
+                if novo_u.strip() and novo_s.strip():
+                    if novo_u.strip() in ["Junior Rebelo", "Kleven", "Valter", "Peterson", "Mauro", "Vanderlei"]:
+                        st.error("Este nome de usuário é reservado para a administração fixa!")
+                    elif tipo_role == "Sócio" and socio_vinc == "Selecione o Sócio...":
+                        st.error("Por favor, selecione qual sócio oficial será vinculado a este login!")
+                    else:
+                        role_convertida = "socio" if tipo_role == "Sócio" else "visitante"
+                        st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {
+                            "senha": novo_s.strip(), 
+                            "role": role_convertida,
+                            "socio_vinculado": socio_vinc
+                        }
+                        try:
+                            pickle.dump(st.session_state["banco_usuarios_dinamicos"], open("backup_usuarios.pkl", "wb"))
+                            st.success(f"Usuário '{novo_u.strip()}' cadastrado com sucesso!")
+                            st.rerun()
+                        except:
+                            st.error("Erro ao gravar arquivo físico de backup.")
                 else:
-                    role_convertida = "socio" if tipo_role == "Sócio" else "visitante"
-                    st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {
-                        "senha": novo_s.strip(), 
-                        "role": role_convertida,
-                        "socio_vinculado": socio_vinc
-                    }
-                    try:
-                        pickle.dump(st.session_state["banco_usuarios_dinamicos"], open("backup_usuarios.pkl", "wb"))
-                        st.success(f"Usuário '{novo_u.strip()}' cadastrado com sucesso!")
-                        st.rerun()
-                    except:
-                        st.error("Erro ao gravar arquivo físico.")
-            else:
-                st.error("Preencha todos os campos do formulário!")
+                    st.error("Preencha todos os campos do formulário!")
                     
     with col_cad_2:
         st.markdown("**Usuários Cadastrados Ativos**")
@@ -171,4 +172,3 @@ if role == "master":
                 "Sócio Vinculado": v.get("socio_vinculado", "Nenhum")
             })
         st.dataframe(pd.DataFrame(lista_exibicao), use_container_width=True, hide_index=True)
-
