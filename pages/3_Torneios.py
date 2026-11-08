@@ -5,36 +5,28 @@ import random
 from PIL import Image, ImageDraw
 import io
 
-# Configuração da página
 st.set_page_config(page_title="Torneios - Painel ARO", page_icon="🦅", layout="wide")
-
-# Título do Módulo
 st.title("🦅 Gestão de Torneios - ARO Rio do Sul")
 
-# Validar nível de acesso
 is_master = st.session_state.get("user_role") == "master"
 
-# Sincronização e inicialização da data global
+# Configuração de data segura
 if "data_torneio_aro" not in st.session_state or st.session_state["data_torneio_aro"] is None:
     st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
 elif isinstance(st.session_state["data_torneio_aro"], str):
-    try:
-        st.session_state["data_torneio_aro"] = datetime.datetime.strptime(st.session_state["data_torneio_aro"], "%Y-%m-%d").date()
-    except ValueError:
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
         try:
-            st.session_state["data_torneio_aro"] = datetime.datetime.strptime(st.session_state["data_torneio_aro"], "%d/%m/%Y").date()
+            st.session_state["data_torneio_aro"] = datetime.datetime.strptime(st.session_state["data_torneio_aro"], fmt).date()
+            break
         except ValueError:
-            st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
+            continue
 
-# Inicializar banco de inscrições se não existir
 if "torneio_inscricoes_aro" not in st.session_state:
-    st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(
-        columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"]
-    )
+    st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
 
 df_inscritos = st.session_state["torneio_inscricoes_aro"]
 
-# --- 1. CABEÇALHO COM DATA EDITÁVEL (EXCLUSIVO MASTER) ---
+# --- 1. DATA EDITÁVEL ---
 st.markdown("### 📅 Cronograma do Evento")
 if is_master:
     nova_data = st.date_input("Data do Torneio:", value=st.session_state["data_torneio_aro"], format="DD/MM/YYYY", key="edit_data_torneio")
@@ -46,188 +38,107 @@ else:
 
 st.write("---")
 
-# --- 2. ÍCONES E CONTADORES LIMPOS POR ESPÉCIE + TOTALIZADOR ---
+# --- 2. CONTADORES LIMPOS ---
 st.markdown("### 📊 Estatísticas de Inscrição")
-
 especies_validas = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
-icones_especies = {
-    "Trinca Ferro": "🪵 Trinca Ferro",
-    "Coleiro": "🌾 Coleiro",
-    "Bico de Pimenta": "🌶️ Bico de Pimenta",
-    "Canário": "🟡 Canário",
-    "Azulão": "🔷 Azulão",
-    "Tiziu": "🕶️ Tiziu"
-}
+icones_especies = {"Trinca Ferro": "🪵 Trinca Ferro", "Coleiro": "🌾 Coleiro", "Bico de Pimenta": "🌶️ Bico de Pimenta", "Canário": "🟡 Canário", "Azulão": "🔷 Azulão", "Tiziu": "🕶️ Tiziu"}
 
-# Calcular quantidades atuais por espécie
-contagem = {esp: 0 for esp in especies_validas}
-total_geral_inscritos = 0
-if not df_inscritos.empty:
-    total_geral_inscritos = len(df_inscritos)
-    for esp in especies_validas:
-        contagem[esp] = len(df_inscritos[df_inscritos["Espécie"] == esp])
+contagem = {esp: len(df_inscritos[df_inscritos["Espécie"] == esp]) if not df_inscritos.empty else 0 for esp in especies_validas}
+total_geral = sum(contagem.values())
 
-# Exibir os contadores mostrando apenas o número puro
-cols_contador = st.columns(6)
+cols = st.columns(6)
 for i, esp in enumerate(especies_validas):
-    with cols_contador[i]:
-        st.metric(label=icones_especies[esp], value=str(contagem[esp]))
+    cols[i].metric(label=icones_especies[esp], value=str(contagem[esp]))
 
-# Totalizador Geral embaixo da lista de espécies
 st.write("")
-st.info(f"✨ **TOTAL DE AVES INSCRITAS NO TORNEIO:** {total_geral_inscritos} aves cadastradas.")
+st.info(f"✨ **TOTAL DE GAIOLAS / AVES INSCRITAS:** {total_geral}")
 st.write("---")
 
-# --- 3. FORMULÁRIO DE INSCRIÇÃO (EXCLUSIVO MASTER) ---
+# --- 3. INSCRIÇÃO ---
 if is_master:
     st.markdown("### 📝 Nova Inscrição de Ave")
-    
-    with st.form("formulario_inscricao", clear_on_submit=True):
-        proprietario = st.text_input("Proprietário:")
-        nome_ave = st.text_input("Nome da Ave:")
-        especie = st.selectbox("Espécie:", especies_validas)
-        anilha = st.text_input("Anilha:")
-        
-        botao_inscrever = st.form_submit_button("Inscrever Ave", use_container_width=True)
-        
-        if botao_inscrever:
-            if proprietario.strip() == "" or nome_ave.strip() == "" or anilha.strip() == "":
-                st.error("Por favor, preencha todos os campos para efetuar a inscrição.")
-            else:
-                estacas_ocupadas = df_inscritos[df_inscritos["Espécie"] == especie]["Estaca"].tolist()
+    with st.form("form_inscrever", clear_on_submit=True):
+        p = st.text_input("Proprietário:")
+        n = st.text_input("Nome da Ave:")
+        e = st.selectbox("Espécie:", especies_validas)
+        a = st.text_input("Anilha:")
+        if st.form_submit_button("Inscrever Ave", use_container_width=True):
+            if p.strip() and n.strip() and a.strip():
+                ocupadas = df_inscritos[df_inscritos["Espécie"] == e]["Estaca"].tolist()
+                limite = 50 if e in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if e in ["Canário", "Azulão"] else 5)
+                livres = [x for x in range(1, limite + 1) if x not in ocupadas]
+                sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else limite + 1)
                 
-                if especie in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"]:
-                    limite_inicial = 50
-                elif especie in ["Canário", "Azulão"]:
-                    limite_inicial = 25
-                elif especie == "Tiziu":
-                    limite_inicial = 5
-                
-                estacas_livres = [e for e in range(1, limite_inicial + 1) if e not in estacas_ocupadas]
-                
-                if estacas_livres:
-                    staca_sorteada = random.choice(estacas_livres)
-                else:
-                    if estacas_ocupadas:
-                        staca_sorteada = max(estacas_ocupadas) + 1
-                    else:
-                        staca_sorteada = limite_inicial + 1
-                
-                nova_inscricao = pd.DataFrame([{
-                    "Proprietário": proprietario.strip(),
-                    "Nome da Ave": nome_ave.strip(),
-                    "Espécie": especie,
-                    "Anilha": anilha.strip(),
-                    "Estaca": int(staca_sorteada)
-                }])
-                
-                st.session_state["torneio_inscricoes_aro"] = pd.concat([df_inscritos, nova_inscricao], ignore_index=True)
-                st.success(f"Sucesso! Ave '{nome_ave}' inscrita na Espécie {especie} | Estaca Selecionada: {staca_sorteada}")
+                nova = pd.DataFrame([{"Proprietário": p.strip(), "Nome da Ave": n.strip(), "Espécie": e, "Anilha": a.strip(), "Estaca": int(sorteio)}])
+                st.session_state["torneio_inscricoes_aro"] = pd.concat([df_inscritos, nova], ignore_index=True)
+                st.success(f"Sucesso! Ave inscrita na Estaca: {sorteio}")
                 st.rerun()
+            else:
+                st.error("Preencha todos os campos!")
     st.write("---")
 
-# --- 4. EXIBIÇÃO DE PLANILHAS SEPARADAS DENTRO DAS ESPÉCIES ---
+# --- 4. EXIBIÇÃO EM ABAS ---
 st.markdown("### 🏆 Competidores por Categoria")
-
-abas_especies = st.tabs([icones_especies[esp] for esp in especies_validas])
-
+abas = st.tabs([icones_especies[esp] for esp in especies_validas])
 for i, esp in enumerate(especies_validas):
-    with abas_especies[i]:
-        df_filtrado = df_inscritos[df_inscritos["Espécie"] == esp]
-        
-        if df_filtrado.empty:
-            st.info(f"Nenhum pássaro cadastrado na categoria {esp} até o momento.")
+    with abas[i]:
+        df_f = df_inscritos[df_inscritos["Espécie"] == esp]
+        if df_f.empty:
+            st.info(f"Nenhum pássaro cadastrado em {esp}.")
         else:
-            df_ordenado = df_filtrado.sort_values(by="Estaca").reset_index(drop=True)
-            
-            st.dataframe(
-                df_ordenado[["Estaca", "Nome da Ave", "Proprietário", "Anilha"]],
-                hide_index=True,
-                column_config={
-                    "Estaca": st.column_config.NumberColumn("Estaca / Gaiola", format="%d"),
-                    "Nome da Ave": "Nome do Pássaro",
-                    "Proprietário": "Proprietário / Criador",
-                    "Anilha": "Nº da Anilha"
-                },
-                use_container_width=True
-            )
+            st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d")}, use_container_width=True)
 
-# --- 5. FUNÇÃO PARA GERAR A IMAGEM DA TABELA SIMPLES DE INFORMAÇÕES ---
-def criar_imagem_tabela(data_t, mapa_contagem, total_g):
+# --- 5. IMAGEM WHATSAPP ---
+def criar_imagem(dt, mapa, total):
     W, H = 600, 520
     img = Image.new("RGB", (W, H), "#111625")
     draw = ImageDraw.Draw(img)
-    
-    # Moldura dourada minimalista
     draw.rectangle([20, 20, W-20, H-20], outline="#D4AF37", width=2)
-    
-    # Textos do Cabeçalho
     draw.text((W/2, 50), "ARO - RIO DO SUL", fill="#D4AF37", anchor="mm", font_size=26)
-    draw.text((W/2, 90), f"TORNEIO DIA: {data_t}", fill="#FFFFFF", anchor="mm", font_size=20)
-    
-    # Cabeçalho da Tabela
+    draw.text((W/2, 90), f"TORNEIO DIA: {dt}", fill="#FFFFFF", anchor="mm", font_size=20)
     draw.line([40, 130, W-40, 130], fill="#D4AF37", width=2)
     draw.text((50, 145), "ESPÉCIE", fill="#D4AF37", font_size=16)
     draw.text((W-50, 145), "QUANTIDADE", fill="#D4AF37", anchor="ra", font_size=16)
     draw.line([40, 175, W-40, 175], fill="#D4AF37", width=1)
-    
-    # Linhas da tabela
-    y_pos = 190
-    for esp, qtd in mapa_contagem.items():
-        draw.text((50, y_pos), esp.upper(), fill="#FFFFFF", font_size=16)
-        draw.text((W-50, y_pos), str(qtd), fill="#FFFFFF", anchor="ra", font_size=16)
-        draw.line([40, y_pos+25, W-40, y_pos+25], fill="#2D3748", width=1)
-        y_pos += 40
-        
-    # Rodapé da Tabela com Total Acumulado
-    draw.line([40, y_pos, W-40, y_pos], fill="#D4AF37", width=2)
-    draw.text((50, y_pos+15), "TOTAL GERAL DE GAIOLAS", fill="#D4AF37", font_size=18)
-    draw.text((W-50, y_pos+15), str(total_g), fill="#D4AF37", anchor="ra", font_size=18)
-    
+    y = 190
+    for esp, qtd in mapa.items():
+        draw.text((50, y), esp.upper(), fill="#FFFFFF", font_size=16)
+        draw.text((W-50, y), str(qtd), fill="#FFFFFF", anchor="ra", font_size=16)
+        draw.line([40, y+25, W-40, y+25], fill="#2D3748", width=1)
+        y += 40
+    draw.line([40, y, W-40, y], fill="#D4AF37", width=2)
+    draw.text((50, y+15), "TOTAL GERAL DE GAIOLAS", fill="#D4AF37", font_size=18)
+    draw.text((W-50, y+15), str(total), fill="#D4AF37", anchor="ra", font_size=18)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
 
-# --- 6. CENTRAL DE EXPORTAÇÃO E EXCLUSÃO MANUAL PARA CELULAR (EXCLUSIVO MASTER) ---
 if is_master and not df_inscritos.empty:
     st.write("---")
-    st.markdown("### 📊 Exportação e Compartilhamento")
-    
-    data_str = st.session_state["data_torneio_aro"].strftime('%d/%m/%Y')
-    img_bytes = criar_imagem_tabela(data_str, contagem, total_geral_inscritos)
-    
-    st.image(img_bytes, width=400, caption="Informativo Oficial de Inscrições")
-    
-    st.download_button(
-        label="📥 Baixar Cartaz para WhatsApp (Imagem PNG)",
-        data=img_bytes,
-        file_name=f"aro_tabela_inscritos_{st.session_state['data_torneio_aro'].strftime('%Y_%m_%d')}.png",
-        mime="image/png",
-        use_container_width=True
-    )
-    
-    st.write("---")
-    st.markdown("### 🗑️ Cancelar Inscrição (Remover Ave)")
-    st.caption("Desenvolvido para exclusão rápida via celular sem depender de teclado físico.")
-    
-    opcoes_exclusao = []
-    for idx, row in df_inscritos.iterrows():
-        opcoes_exclusao.append(f"[{row['Espécie']}] Estaca {row['Estaca']} - {row['Nome da Ave']} (Criador: {row['Proprietário']})")
-    
-    ave_selecionada_txt = st.selectbox("Selecione a ave que deseja remover:", opcoes_exclusao, key="combo_deletar_ave")
-    confirmar_check = st.checkbox("⚠️ Marque aqui para confirmar que deseja excluir esta ave", key="check_seguranca_ave")
-    
-    if st.button("❌ Deletar Ave Selecionada", type="secondary", use_container_width=True):
-        if confirmar_check:
-            posicao_lista = opcoes_exclusao.index(ave_selecionada_txt)
-            indice_original = df_inscritos.index[posicao_lista]
-            
-            st.session_state["torneio_inscricoes_aro"] = df_inscritos.drop(indice_original).reset_index(drop=True)
-            st.success("A ave foi removida do torneio com sucesso!")
-            st.rerun()
-        else:
-            st.error("Por favor, marque a caixa de confirmação de segurança antes de clicar em deletar.")
+    st.markdown("### 📊 Exportação Compartilhada")
+    img_b = criar_imagem(st.session_state["data_torneio_aro"].strftime('%d/%m/%Y'), contagem, total_geral)
+    st.image(img_b, width=380)
+    st.download_button("📥 Baixar Cartaz para WhatsApp", data=img_b, file_name="aro_torneio.png", mime="image/png", use_container_width=True)
 
-# --- 7. RECURSO DE ZERAR TORNEIO COMPLETO (EXCLUSIVO MASTER) ---
+# --- 6. EXCLUSÃO CELULAR ---
+if is_master and not df_inscritos.empty:
+    st.write("---")
+    st.markdown("### 🗑️ Cancelar Inscrição")
+    opcoes = [f"[{r['Espécie']}] Estaca {r['Estaca']} - {r['Nome da Ave']} ({r['Proprietário']})" for _, r in df_inscritos.iterrows()]
+    sel = st.selectbox("Escolha a ave para remover:", opcoes)
+    if st.checkbox("⚠️ Confirmar remoção desta ave", key="chk_del_u"):
+        if st.button("❌ Deletar Ave Selecionada", use_container_width=True):
+            idx = opcoes.index(sel)
+            st.session_state["torneio_inscricoes_aro"] = df_inscritos.drop(df_inscritos.index[idx]).reset_index(drop=True)
+            st.success("Ave removida!")
+            st.rerun()
+
+# --- 7. ZERAR TORNEIO COMPLETO ---
 if is_master:
     st.write("---")
+    st.markdown("### ⚠️ Zona de Perigo Administrativa")
+    if st.checkbox("💥 CONFIRMAR EXCLUSÃO DE TODOS OS INSCRITOS", key="chk_reset"):
+        if st.button("🗑️ ZERAR TORNEIO COMPLETO", type="primary", use_container_width=True):
+            st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
+            st.warning("Torneio resetado com sucesso!")
+            st.rerun()
