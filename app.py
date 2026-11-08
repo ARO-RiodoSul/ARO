@@ -26,31 +26,27 @@ if not st.session_state["autenticado"]:
         col_l2.image("logo.png", use_container_width=True)
     else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     with st.form("t_login"):
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
+        u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
             if u == "Junior Rebelo" and s == "270688": st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
             elif u == "Kleven" and s == "12345678": st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
             else: st.error("Incorreto.")
     st.stop()
 
-# --- 1. MEMÓRIA DE SÓCIOS COORDENADA (DINÂMICA CONSECUTIVA) ---
+# --- 1. MEMÓRIA DE SÓCIOS COORDENADA (REDUZIDO FIXO PARA 20) ---
 if "dados_socios_internos" not in st.session_state:
     if os.path.exists("backup_socios.csv"):
-        st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv")
+        df_bkp = pd.read_csv("backup_socios.csv")
+        # Garante a redução se o arquivo antigo tiver 100 linhas guardadas
+        if len(df_bkp) > 20 and df_bkp["ID"].isna().all() and df_bkp["Nome"].isna().all():
+            st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+        else:
+            st.session_state["dados_socios_internos"] = df_bkp
     else:
-        st.session_state["dados_socios_internos"] = pd.DataFrame([
-            {"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)
-        ])
+        st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
 
-# --- 2. CRONOLOGIA FINANCEIRA DIRETAMENTE DECLARADA (SEM ERROS DE COMPILAÇÃO) ---
-lista_meses = [
-    "Dezembro 2026", 
-    "Janeiro 2027", "Fevereiro 2027", "Março 2027", "Abril 2027", "Maio 2027", "Junho 2027", 
-    "Julho 2027", "Agosto 2027", "Setembro 2027", "Outubro 2027", "Novembro 2027", "Dezembro 2027",
-    "Janeiro 2028", "Fevereiro 2028", "Março 2028", "Abril 2028", "Maio 2028", "Junho 2028", 
-    "Julho 2028", "Agosto 2028", "Setembro 2028", "Outubro 2028", "Novembro 2028", "Dezembro 2028"
-]
+# --- 2. CRONOLOGIA FINANCEIRA ---
+lista_meses = ["Dezembro 2026", "Janeiro 2027", "Fevereiro 2027", "Março 2027", "Abril 2027", "Maio 2027", "Junho 2027", "Julho 2027", "Agosto 2027", "Setembro 2027", "Outubro 2027", "Novembro 2027", "Dezembro 2027", "Janeiro 2028", "Fevereiro 2028", "Março 2028", "Abril 2028", "Maio 2028", "Junho 2028", "Julho 2028", "Agosto 2028", "Setembro 2028", "Outubro 2028", "Novembro 2028", "Dezembro 2028"]
 
 if "saldo_anterior_master" not in st.session_state:
     if os.path.exists("backup_saldo_ant.txt"):
@@ -76,8 +72,7 @@ def gerar_relatorio_texto():
         m_e, m_s = pd.to_numeric(df_m_p["Entradas"], errors='coerce').sum(), pd.to_numeric(df_m_p["Saídas"], errors='coerce').sum()
         txt += f"--------- PERÍODO: {m} ---------\n"
         if not df_at.empty:
-            for _, r in df_at.iterrows():
-                txt += f"Dia {int(r['Dia'])} | Entrada: R$ {r['Entradas']:.2f} | Saída: R$ {r['Saídas']:.2f} | Motivo: {r['Motivo']}\n"
+            for _, r in df_at.iterrows(): txt += f"Dia {int(r['Dia'])} | Entrada: R$ {r['Entradas']:.2f} | Saída: R$ {r['Saídas']:.2f} | Motivo: {r['Motivo']}\n"
         else: txt += "Nenhum lançamento ativo neste mês.\n"
         txt += f"TOTAL ENTRADAS: R$ {m_e:.2f} | TOTAL SAÍDAS: R$ {m_s:.2f} | LÍQUIDO: R$ {(m_e - m_s):.2f}\n\n"
     txt += f"========================================================\n               FECHAMENTO CONSOLIDADO\n========================================================\n"
@@ -99,9 +94,14 @@ if st.session_state["tela_atual"] == "menu":
 elif st.session_state["tela_atual"] == "socios":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("👥 Controle de Sócios")
-    st.markdown("---")
     
     if st.session_state["user_role"] == "master":
+        # Ferramenta para forçar a limpeza caso as 100 linhas antigas persistam
+        if st.button("♻️ Forçar Ajuste para Limpar Linhas Antigas (Reduzir para 20 Sócios)"):
+            st.session_state["dados_socios_internos"] = pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+            st.session_state["dados_socios_internos"].to_csv("backup_socios.csv", index=False)
+            st.rerun()
+            
         df_m = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"])}, hide_index=True)
         if not df_m.equals(st.session_state["dados_socios_internos"]): 
             st.session_state["dados_socios_internos"] = df_m
@@ -122,8 +122,7 @@ elif st.session_state["tela_atual"] == "socios":
 elif st.session_state["tela_atual"] == "caixa":
     if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
     st.title("🪙 Controle Financeiro - Finanças")
-    if st.session_state["user_role"] == "master":
-        st.download_button(label="📥 Baixar Relatório Financeiro Geral", data=gerar_relatorio_texto(), file_name="relatorio_financeiro_aro.txt", mime="text/plain", use_container_width=True)
+    if st.session_state["user_role"] == "master": st.download_button(label="📥 Baixar Relatório Financeiro Geral", data=gerar_relatorio_texto(), file_name="relatorio_financeiro_aro.txt", mime="text/plain", use_container_width=True)
             
     _, c_ant, _ = st.columns(3)
     with c_ant:
@@ -147,12 +146,3 @@ elif st.session_state["tela_atual"] == "caixa":
     df_m_at = st.session_state["dados_meses_financeiros"][m_sel]
     
     if st.session_state["user_role"] == "master":
-        df_m_ed = st.data_editor(df_m_at, use_container_width=True, num_rows="dynamic", hide_index=True, column_config={"Dia": st.column_config.NumberColumn("Dia"), "Entradas": st.column_config.NumberColumn("Entradas", min_value=0.0, format="%.2f"), "Saídas": st.column_config.NumberColumn("Saídas", min_value=0.0, format="%.2f")})
-        if not df_m_ed.equals(df_m_at):
-            st.session_state["dados_meses_financeiros"][m_sel] = df_m_ed
-            with open("backup_financas.pkl", "wb") as f: pickle.dump(st.session_state["dados_meses_financeiros"], f)
-            st.toast("💾 Salvo!"); st.rerun()
-        with st.expander("➕ Criar Linha Dupla para o mesmo Dia"):
-            with st.form("f_ex", clear_on_submit=True):
-                cd, ce, cs, cm = st.columns(4)
-                d_x = cd.number_input("Dia", min_value=1, max_value=31, value=1)
