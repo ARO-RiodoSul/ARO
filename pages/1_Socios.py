@@ -62,6 +62,7 @@ if is_master:
 st.write("---")
 st.markdown("### 📊 Listagem de Sócios Cadastrados")
 
+# FIX: Removida qualquer trava de nível de acesso para a exibição da tabela principal
 if df_socios.empty:
     st.info("Nenhum sócio registrado no sistema até o momento.")
 else:
@@ -70,8 +71,12 @@ else:
         hide_index=True,
         column_config={
             "Número": st.column_config.NumberColumn("Nº", format="%d"),
-            "ID": "ID ARO", "Nome": "Nome Completo", "Telefone": "Telefone/Contato",
-            "CPF": "CPF", "CTF": "CTF IBAMA", "Status": "Status"
+            "ID": "ID ARO", 
+            "Nome": "Nome Completo", 
+            "Telefone": "Telefone/Contato",
+            "CPF": "CPF", 
+            "CTF": "CTF IBAMA", 
+            "Status": "Status"
         },
         use_container_width=True
     )
@@ -128,4 +133,3 @@ if is_master and not df_socios.empty:
             st.rerun()
         else:
             st.error("Marque a caixa de confirmação!")
-
