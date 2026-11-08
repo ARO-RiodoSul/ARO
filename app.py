@@ -13,9 +13,9 @@ if "autenticado" not in st.session_state:
 if not st.session_state["autenticado"]:
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # EXIBIÇÃO DA LOGO NO TOPO DA TELA DE LOGIN
+    # EXIBIÇÃO DA LOGO NO TOPO DE LOGIN (CORRIGIDO PARA REQUERER 3 COLUNAS)
     if os.path.exists("logo.png"):
-        col_logo_esq, col_logo_meio, col_logo_dir = st.columns()
+        col_logo_esq, col_logo_meio, col_logo_dir = st.columns(3)
         col_logo_meio.image("logo.png", use_container_width=True)
     else:
         st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
@@ -51,32 +51,34 @@ if "tela_atual" not in st.session_state:
 # CONEXÃO DIRETA COM O GOOGLE SHEETS
 try:
     url_base = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    if "edit?" in url_base:
-        link_limpo = url_base.split("/edit")
-        url_socios = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Socios"
-        url_financeiro = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Financeiro"
+    
+    # CORREÇÃO: Captura estritamente o primeiro item do texto cortado [0]
+    if "/edit" in url_base:
+        link_limpo = url_base.split("/edit")[0]
     else:
-        url_socios = url_base
-        url_financeiro = url_base
+        link_limpo = url_base
+        
+    url_socios = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Socios"
+    url_financeiro = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Financeiro"
 
     df_socios = pd.read_csv(url_socios)
     df_financeiro = pd.read_csv(url_financeiro)
 except Exception as e:
-    st.error("Erro ao conectar à planilha. Verifique as configurações avançadas.")
+    st.error(f"Erro ao conectar à planilha. Verifique se o link está público e correto nos Secrets. Detalhe: {e}")
     st.stop()
 
 # --- TELA 1: MENU PRINCIPAL ---
 if st.session_state["tela_atual"] == "menu":
     
-    # Barra superior com o novo título e logo alinhados
-    col_logo, col_titulo, col_logout = st.columns([1, 4, 1])
+    # Barra superior com o novo título e logo alinhados (CORRIGIDO PARA REQUERER 3 COLUNAS)
+    col_logo, col_titulo, col_logout = st.columns(3)
     
     if os.path.exists("logo.png"):
-        col_logo.image("logo.png", width=100)
+        col_logo.image("logo.png", width=80)
     
-    col_titulo.markdown("<h1 style='margin-top: 15px; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    col_titulo.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
     
-    if col_logout.button("🔒 Sair do App", style="margin-top: 25px;"):
+    if col_logout.button("🔒 Sair do App"):
         st.session_state["autenticado"] = False
         st.rerun()
         
@@ -101,17 +103,17 @@ if st.session_state["tela_atual"] == "menu":
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center;'>Selecione o módulo de gerenciamento:</h3>", unsafe_allow_html=True)
     
-    # BOTÕES LADO A LADO COM ÍCONES
+    # BOTÕES LADO A LADO COM ÍCONES (CORRIGIDO PARA REQUERER 2 COLUNAS)
     col_btn_socios, col_btn_caixa = st.columns(2)
     
     with col_btn_socios:
-        st.markdown("<div style='text-align: center;'>👥</div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; margin: 0;'>👥</h1>", unsafe_allow_html=True)
         if st.button("Controle de Sócios", use_container_width=True, type="primary"):
             st.session_state["tela_atual"] = "socios"
             st.rerun()
             
     with col_btn_caixa:
-        st.markdown("<div style='text-align: center;'>💸</div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; margin: 0;'>💸</h1>", unsafe_allow_html=True)
         if st.button("Fluxo de Caixa", use_container_width=True, type="primary"):
             st.session_state["tela_atual"] = "caixa"
             st.rerun()
