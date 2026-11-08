@@ -1,82 +1,137 @@
 import streamlit as st
 import pandas as pd
-import datetime
+import os, pickle, random
 
-# 1. CONFIGURAÇÃO DA PÁGINA (Deve ser o primeiro comando)
-st.set_page_config(
-    page_title="Painel de Controle - ARO Rio do Sul",
-    page_icon="🦅",
-    layout="wide"
-)
+# CONFIGURAÇÃO GERAL
+st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="📊", layout="wide")
+st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
-# 2. INICIALIZAÇÃO SEGURA DO ESTADO GLOBAL (session_state)
-if "username" not in st.session_state:
-    st.session_state["username"] = None
-if "user_role" not in st.session_state:
-    st.session_state["user_role"] = None
-if "data_torneio_aro" not in st.session_state:
-    st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
+if "autenticado" not in st.session_state:
+    st.session_state.update({"autenticado": False, "user_role": "user", "tela_atual": "menu"})
 
-# --- 3. CONTROLE DE NAVEGAÇÃO SEGURO (BLOCAGE DE PÁGINAS) ---
-# Definir a página inicial de login
-login_page = st.Page("app.py", title="🔑 Área de Acesso", icon="🔒")
+# TELA DE LOGIN PROTEGIDA
+if not st.session_state["autenticado"]:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"):
+        st.columns(3)[1].image("logo.png", use_container_width=True)
+    else: st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    with st.form("t_login"):
+        u, s = st.text_input("Usuário"), st.text_input("Senha", type="password")
+        if st.form_submit_button("Entrar"):
+            if u == "Junior Rebelo" and s == "270688": st.session_state.update({"autenticado": True, "user_role": "master"}); st.rerun()
+            elif u == "Kleven" and s == "12345678": st.session_state.update({"autenticado": True, "user_role": "leitor"}); st.rerun()
+            else: st.error("Incorreto.")
+    st.stop()
 
-# Definir as páginas protegidas que ficam na pasta /pages
-pag_socios = st.Page("pages/1_Socios.py", title="👥 Cadastro de Sócios", icon="👥")
-pag_financas = st.Page("pages/2_Financas.py", title="💰 Fluxo de Caixa", icon="💰")
-pag_torneios = st.Page("pages/3_Torneios.py", title="🦅 Torneios Oficiais", icon="🦅")
+# --- SISTEMA DE BACKUP DE DADOS UNIFICADO ---
+def carregar_dados():
+    if "dados_socios_internos" not in st.session_state:
+        st.session_state["dados_socios_internos"] = pd.read_csv("backup_socios.csv") if os.path.exists("backup_socios.csv") else pd.DataFrame([{"Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"} for i in range(1, 21)])
+    if "saldo_anterior_master" not in st.session_state:
+        st.session_state["saldo_anterior_master"] = float(open("backup_saldo_ant.txt", "r").read()) if os.path.exists("backup_saldo_ant.txt") else 0.0
+    if "dados_meses_financeiros" not in st.session_state:
+        st.session_state["dados_meses_financeiros"] = pickle.load(open("backup_financas.pkl", "rb")) if os.path.exists("backup_financas.pkl") else {m: pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)]) for m in lista_meses}
+    if "dados_torneios_internos" not in st.session_state:
+        st.session_state["dados_torneios_internos"] = pickle.load(open("backup_torneios_v2.pkl", "rb")) if os.path.exists("backup_torneios_v2.pkl") else pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"])
+    if "data_torneio_aro" not in st.session_state:
+        st.session_state["data_torneio_aro"] = open("backup_data_torneio.txt", "r").read() if os.path.exists("backup_data_torneio.txt") else "08/11/2026"
 
-# REGRA DE OURO: Se NÃO estiver logado, a única página existente no app é a tela de login
-if st.session_state["username"] is None:
-    pg = st.navigation([login_page], position="hidden") # Esconde a barra lateral completamente
-    pg.run()
+lista_meses = ["Dezembro 2026"] + [f"{m} {a}" for a in ["2027", "2028"] for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]]
+carregou = carregar_dados()
+
+t_ent = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Entradas"], errors='coerce').sum() for m in lista_meses)
+t_sai = sum(pd.to_numeric(st.session_state["dados_meses_financeiros"][m]["Saídas"], errors='coerce').sum() for m in lista_meses)
+s_ges, s_tot = t_ent - t_sai, t_ent + st.session_state["saldo_anterior_master"] - t_sai
+
+# --- SORTEIO INTELIGENTE DE ESTACAS ---
+def sortear_estaca(esp, df_t):
+    ocupadas = df_t[df_t["Espécie"] == esp]["Estaca"].tolist()
+    lim, prox = (50, 51) if esp in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else ((25, 26) if esp in ["Canário", "Azulão"] else (5, 6))
+    livres = [x for x in range(1, lim + 1) if x not in ocupadas]
+    if livres: return random.choice(livres)
+    while prox in ocupadas: prox += 1
+    return prox
+
+def gerar_relatorio_texto():
+    txt = "========================================================\n        RELATÓRIO FINANCEIRO COMPLETO - ARO RIO DO SUL\n========================================================\n\n"
+    for m in lista_meses:
+        df_m_p = st.session_state["dados_meses_financeiros"][m]
+        df_at = df_m_p[(df_m_p["Entradas"] > 0) | (df_m_p["Saídas"] > 0) | (df_m_p["Motivo"] != "")]
+        txt += f"--------- PERÍODO: {m} ---------\n"
+        if not df_at.empty:
+            for _, r in df_at.iterrows(): txt += f"Dia {int(r['Dia'])} | Entrada: R$ {r['Entradas']:.2f} | Saída: R$ {r['Saídas']:.2f} | Motivo: {r['Motivo']}\n"
+        else: txt += "Nenhum lançamento ativo.\n"
+        txt += f"TOTAL ENTRADAS: R$ {df_m_p['Entradas'].sum():.2f} | TOTAL SAÍDAS: R$ {df_m_p['Saídas'].sum():.2f}\n\n"
+    return txt + f" FECHAMENTO CONSOLIDADO \nSaldo Anterior: R$ {st.session_state['saldo_anterior_master']:.2f}\nEntradas: R$ {t_ent:.2f}\nSaídas: R$ {t_sai:.2f}\nGestão: R$ {s_ges:.2f}\nTotal: R$ {s_tot:.2f}\n"
+
+# --- TELA 1: MENU PRINCIPAL ---
+if st.session_state["tela_atual"] == "menu":
+    c_l, c_t, c_o = st.columns(3)
+    try:
+        if os.path.exists("logo.png"): c_l.image("logo.png", width=80)
+    except: pass
+    c_t.markdown("<h1 style='margin: 0; color: #1E3A8A;'>Painel ARO - Rio do Sul</h1>", unsafe_allow_html=True)
+    if c_o.button("🔒 Sair"): st.session_state["autenticado"] = False; st.rerun()
+    st.markdown("---")
+    cb1, cb2, cb3 = st.columns(3)
+    if cb1.button("👥 Sócios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "socios"; st.rerun()
+    if cb2.button("🪙 Finanças", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "caixa"; st.rerun()
+    if cb3.button("🏆 Torneios", use_container_width=True, type="primary"): st.session_state["tela_atual"] = "torneios"; st.rerun()
+
+# --- TELA 2: SÓCIOS ---
+elif st.session_state["tela_atual"] == "socios":
+    if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
+    st.title("👥 Controle de Sócios")
+    if st.session_state["user_role"] == "master":
+        df_m = st.data_editor(st.session_state["dados_socios_internos"], use_container_width=True, disabled=["Número"], column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Ativo", "Inativo"])}, hide_index=True)
+        if not df_m.equals(st.session_state["dados_socios_internos"]): 
+            st.session_state["dados_socios_internos"] = df_m
+            df_m.to_csv("backup_socios.csv", index=False); st.toast("💾 Salvo!"); st.rerun()
+        if st.button("➕ Adicionar Linha para Novo Sócio"):
+            p_n = len(st.session_state["dados_socios_internos"]) + 1
+            st.session_state["dados_socios_internos"] = pd.concat([st.session_state["dados_socios_internos"], pd.DataFrame([{"Número": p_n, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"}])], ignore_index=True)
+            st.session_state["dados_socios_internos"].to_csv("backup_socios.csv", index=False); st.rerun()
+    else: st.dataframe(st.session_state["dados_socios_internos"], use_container_width=True, hide_index=True)
+
+# --- TELA 3: FINANÇAS ---
+elif st.session_state["tela_atual"] == "caixa":
+    if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
+    st.title("🪙 Controle Financeiro - Finanças")
+    if st.session_state["user_role"] == "master": st.download_button(label="📥 Baixar Relatório Financeiro Geral", data=gerar_relatorio_texto(), file_name="relatorio_financeiro_aro.txt", mime="text/plain", use_container_width=True)
+    _, c_ant, _ = st.columns(3)
+    with c_ant:
+        st.markdown("<h3 style='text-align: center;'>🏦 Saldo Anterior</h3>", unsafe_allow_html=True)
+        if st.session_state["user_role"] == "master":
+            n_v = st.number_input("Editar", value=st.session_state["saldo_anterior_master"], format="%.2f", label_visibility="collapsed")
+            if n_v != st.session_state["saldo_anterior_master"]: st.session_state["saldo_anterior_master"] = n_v; open("backup_saldo_ant.txt", "w").write(str(n_v)); st.rerun()
+        else: st.markdown(f"<h4 style='text-align: center;'>R$ {st.session_state['saldo_anterior_master']:,.2f}</h4>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    cm1, cm2 = st.columns(2)
+    cm1.metric("🟢 Total de Entradas", f"R$ {t_ent:,.2f}")
+    cm2.metric("🔴 Total de Saídas", f"R$ {t_sai:,.2f}")
+    st.markdown("<br>", unsafe_allow_html=True)
+    cb1, cb2 = st.columns(2)
+    cb1.metric("📊 Saldo (Gestão Atual)", f"R$ {s_ges:,.2f}")
+    cb2.metric("💰 Saldo (Total)", f"R$ {s_tot:,.2f}")
+    st.markdown("---")
+    m_sel = st.selectbox("📅 Selecione o Mês de Trabalho:", lista_meses)
+    df_m_at = st.session_state["dados_meses_financeiros"][m_sel]
+    if st.session_state["user_role"] == "master":
+        df_m_ed = st.data_editor(df_m_at, use_container_width=True, num_rows="dynamic", hide_index=True, column_config={"Dia": st.column_config.NumberColumn("Dia"), "Entradas": st.column_config.NumberColumn("Entradas", min_value=0.0, format="%.2f"), "Saídas": st.column_config.NumberColumn("Saídas", min_value=0.0, format="%.2f")})
+        if not df_m_ed.equals(df_m_at):
+            st.session_state["dados_meses_financeiros"][m_sel] = df_m_ed
+            pickle.dump(st.session_state["dados_meses_financeiros"], open("backup_financas.pkl", "wb"))
+            st.toast("💾 Salvo!"); st.rerun()
+    else: st.dataframe(df_m_at, use_container_width=True, hide_index=True)
+
+# --- TELA 4: TORNEIOS (COMPACTADA, LEVE E COMPLETA SEM RISCO DE CORTES) ---
+elif st.session_state["tela_atual"] == "torneios":
+    if st.button("⬅️ Voltar ao Menu"): st.session_state["tela_atual"] = "menu"; st.rerun()
+    st.title("🏆 Módulo de Torneios - Inscrições")
+    st.markdown("---")
     
-    # --- TELA DE LOGIN CENTRALIZADA ---
-    st.markdown("<h2 style='text-align: center;'>🦅 Associação Regional dos Ornitofílios</h2>", unsafe_allow_html=True)
-    st.markdown("<h4 style='text-align: center; color: gray;'>Sistema de Gestão Interna - ARO Rio do Sul</h4>", unsafe_allow_html=True)
-    st.write("\n")
-    
-    _, col_login_box, _ = st.columns([1, 2, 1])
-    
-    with col_login_box:
-        st.markdown("### 🔑 Identificação do Usuário")
-        usuario_input = st.text_input("Nome de Usuário / Credencial:", placeholder="Ex: Junior Rebelo")
-        
-        if st.button("Entrar no Painel", use_container_width=True):
-            if usuario_input.strip() == "Junior Rebelo":
-                st.session_state["username"] = "Junior Rebelo"
-                st.session_state["user_role"] = "master"
-                st.success("Acesso Master concedido!")
-                st.rerun()
-            elif usuario_input.strip() != "":
-                st.session_state["username"] = usuario_input.strip()
-                st.session_state["user_role"] = "leitura"
-                st.info(f"Acesso concedido como {usuario_input.strip()} (Modo Leitura).")
-                st.rerun()
-            else:
-                st.error("Por favor, preencha o campo de usuário para entrar.")
-
-# Se o usuário JÁ estiver logado, libera o menu lateral com todas as páginas reais
-else:
-    # Gerencia a barra de navegação ativa com as abas protegidas
-    pg = st.navigation({
-        "Menu Principal": [login_page],
-        "Módulos Administrativos": [pag_socios, pag_financas, pag_torneios]
-    })
-    pg.run()
-    
-    # Conteúdo que aparece na tela inicial ('app.py') após o login efetuado
-    st.sidebar.write("---")
-    if st.sidebar.button("🚪 Encerrar Sessão", use_container_width=True):
-        st.session_state["username"] = None
-        st.session_state["user_role"] = None
-        st.rerun()
-        
-    st.markdown(f"## 👋 Olá, {st.session_state['username']}!")
-    st.write("Você está conectado ao sistema da ARO. Utilize a barra lateral que acabou de aparecer para navegar entre os módulos.")
-    st.write("---")
-    
-    # Dashboard Informativo Simples de Boas-Vindas
-    st.markdown("### 📅 Próximo Evento Cadastrado")
-    st.metric(label="Data do Torneio Oficial ARO", value=st.session_state["data_torneio_aro"].strftime('%d/%m/%Y'))
-    st.caption("Para alterar dados financeiros ou realizar inscrições de aves, selecione a página correspondente no menu lateral esquerdo.")
+    _, c_date, _ = st.columns(3)
+    with c_date:
+        st.markdown("📅 **Data do Torneio:**", unsafe_allow_html=True)
+        if st.session_state["user_role"] == "master":
+            n_dt = st.text_input("Editar Data", value=st.session_state["data_torneio_aro"], label_visibility="collapsed")
