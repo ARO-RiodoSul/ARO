@@ -12,11 +12,10 @@ st.title("🦅 Gestão de Torneios - ARO Rio do Sul")
 # Validar nível de acesso
 is_master = st.session_state.get("user_role") == "master"
 
-# Sincronização e correção automática da data guardada no session_state
+# Sincronização e inicialização da data global
 if "data_torneio_aro" not in st.session_state or st.session_state["data_torneio_aro"] is None:
     st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
 elif isinstance(st.session_state["data_torneio_aro"], str):
-    # CORREÇÃO CHAVE: Se a data veio como texto do app.py, transforma de volta em Objeto de Data real
     try:
         st.session_state["data_torneio_aro"] = datetime.datetime.strptime(st.session_state["data_torneio_aro"], "%Y-%m-%d").date()
     except ValueError:
@@ -25,7 +24,7 @@ elif isinstance(st.session_state["data_torneio_aro"], str):
         except ValueError:
             st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
 
-# Inicializar banco de inscrições no session_state se não existir
+# Inicializar banco de inscrições se não existir
 if "torneio_inscricoes_aro" not in st.session_state:
     st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(
         columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca"]
@@ -33,17 +32,21 @@ if "torneio_inscricoes_aro" not in st.session_state:
 
 df_inscritos = st.session_state["torneio_inscricoes_aro"]
 
-# --- 1. CABEÇALHO COM DATA SEGURA ---
-data_formatada = st.session_state["data_torneio_aro"].strftime('%d/%m/%Y')
-st.markdown(f"### 📅 Torneio Dia: **{data_formatada}**")
-st.caption("A data do torneio acima é alterada exclusivamente na página inicial (app.py) pelo usuário Master.")
+# --- 1. CABEÇALHO COM DATA EDITÁVEL (EXCLUSIVO MASTER) ---
+st.markdown("### 📅 Cronograma do Evento")
+if is_master:
+    nova_data = st.date_input("Data do Torneio:", value=st.session_state["data_torneio_aro"], format="DD/MM/YYYY", key="edit_data_torneio")
+    if nova_data != st.session_state["data_torneio_aro"]:
+        st.session_state["data_torneio_aro"] = nova_data
+        st.rerun()
+else:
+    st.markdown(f"**Torneio Dia:** {st.session_state['data_torneio_aro'].strftime('%d/%m/%Y')}")
 
 st.write("---")
 
-# --- 2. ÍCONES E CONTADORES POR ESPÉCIE ---
-st.markdown("### 📊 Inscrições por Espécie")
+# --- 2. ÍCONES E CONTADORES LIMPOS POR ESPÉCIE + TOTALIZADOR ---
+st.markdown("### 📊 Estatísticas de Inscrição")
 
-# Lista oficial de espécies suportadas
 especies_validas = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
 icones_especies = {
     "Trinca Ferro": "🪵 Trinca Ferro",
@@ -54,25 +57,29 @@ icones_especies = {
     "Tiziu": "🕶️ Tiziu"
 }
 
-# Calcular quantidades atuais
+# Calcular quantidades atuais por espécie
 contagem = {esp: 0 for esp in especies_validas}
+total_geral_inscritos = 0
 if not df_inscritos.empty:
+    total_geral_inscritos = len(df_inscritos)
     for esp in especies_validas:
         contagem[esp] = len(df_inscritos[df_inscritos["Espécie"] == esp])
 
-# Exibir os contadores em colunas amigáveis
+# Exibir os contadores mostrando apenas o número puro (sem a palavra 'inscrito')
 cols_contador = st.columns(6)
 for i, esp in enumerate(especies_validas):
     with cols_contador[i]:
-        st.metric(label=icones_especies[esp], value=f"{contagem[esp]} inscritos")
+        st.metric(label=icones_especies[esp], value=str(contagem[esp]))
 
+# Adição do Totalizador Geral embaixo da lista de espécies
+st.write("")
+st.info(f"✨ **TOTAL DE AVES INSCRITAS NO TORNEIO:** {total_geral_inscritos} aves cadastradas.")
 st.write("---")
 
 # --- 3. FORMULÁRIO DE INSCRIÇÃO (EXCLUSIVO MASTER) ---
 if is_master:
     st.markdown("### 📝 Nova Inscrição de Ave")
     
-    # Criando o formulário com os 4 campos solicitados
     with st.form("formulario_inscricao", clear_on_submit=True):
         proprietario = st.text_input("Proprietário:")
         nome_ave = st.text_input("Nome da Ave:")
@@ -85,10 +92,8 @@ if is_master:
             if proprietario.strip() == "" or nome_ave.strip() == "" or anilha.strip() == "":
                 st.error("Por favor, preencha todos os campos para efetuar a inscrição.")
             else:
-                # Filtrar estacas já ocupadas pela mesma espécie para evitar duplicados
                 estacas_ocupadas = df_inscritos[df_inscritos["Espécie"] == especie]["Estaca"].tolist()
                 
-                # Definir limites de sorteio conforme a regra de cada espécie
                 if especie in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"]:
                     limite_inicial = 50
                 elif especie in ["Canário", "Azulão"]:
@@ -96,10 +101,8 @@ if is_master:
                 elif especie == "Tiziu":
                     limite_inicial = 5
                 
-                # Gerar lista de estacas livres dentro do range padrão
                 estacas_livres = [e for e in range(1, limite_inicial + 1) if e not in estacas_ocupadas]
                 
-                # Se ainda houver vaga no sorteio inicial, sorteia. Se não, pega o próximo número sequencial livre
                 if estacas_livres:
                     estaca_sorteada = random.choice(estacas_livres)
                 else:
@@ -108,7 +111,6 @@ if is_master:
                     else:
                         estaca_sorteada = limite_inicial + 1
                 
-                # Nova linha de registro
                 nova_inscricao = pd.DataFrame([{
                     "Proprietário": proprietario.strip(),
                     "Nome da Ave": nome_ave.strip(),
@@ -117,30 +119,25 @@ if is_master:
                     "Estaca": int(estaca_sorteada)
                 }])
                 
-                # Salvar no session_state global
                 st.session_state["torneio_inscricoes_aro"] = pd.concat([df_inscritos, nova_inscricao], ignore_index=True)
-                st.success(f"Sucesso! Ave '{nome_ave}' inscrita na Espécie {especie} | Estaca Definida: {estaca_sorteada}")
+                st.success(f"Sucesso! Ave '{nome_ave}' inscrita na Espécie {especie} | Estaca Selecionada: {estaca_sorteada}")
                 st.rerun()
     st.write("---")
 
 # --- 4. EXIBIÇÃO DE PLANILHAS SEPARADAS DENTRO DAS ESPÉCIES ---
 st.markdown("### 🏆 Competidores por Categoria")
 
-# Abas interativas para separar os pássaros de forma limpa
 abas_especies = st.tabs([icones_especies[esp] for esp in especies_validas])
 
 for i, esp in enumerate(especies_validas):
     with abas_especies[i]:
-        # Filtrar apenas as aves pertencentes a esta espécie específica
         df_filtrado = df_inscritos[df_inscritos["Espécie"] == esp]
         
         if df_filtrado.empty:
             st.info(f"Nenhum pássaro cadastrado na categoria {esp} até o momento.")
         else:
-            # Ordenar automaticamente pela coluna Estaca para facilitar a leitura física
             df_ordenado = df_filtrado.sort_values(by="Estaca").reset_index(drop=True)
             
-            # Formatação de exibição da planilha final com a coluna de estacas gerada pelo app
             st.dataframe(
                 df_ordenado[["Estaca", "Nome da Ave", "Proprietário", "Anilha"]],
                 hide_index=True,
