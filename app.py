@@ -25,12 +25,27 @@ if not st.session_state["autenticado"]:
         u = st.text_input("Usuário")
         s = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
+            # PERMISSÃO MASTER (JUNIOR REBELO)
             if u == "Junior Rebelo" and s == "270688":
                 st.session_state.update({"autenticado": True, "user_role": "master"})
                 st.rerun()
-            elif u == "Diretoria" and s == "aro2026":
+            # 5 USUÁRIOS CONFIGURADOS COM PERMISSÃO DE DIRETORIA
+            elif u == "Kleven" and s == "12345678":
                 st.session_state.update({"autenticado": True, "user_role": "diretoria"})
                 st.rerun()
+            elif u == "Valter" and s == "021277":
+                st.session_state.update({"autenticado": True, "user_role": "diretoria"})
+                st.rerun()
+            elif u == "Peterson" and s == "100693":
+                st.session_state.update({"autenticado": True, "user_role": "diretoria"})
+                st.rerun()
+            elif u == "Mauro" and s == "120660":
+                st.session_state.update({"autenticado": True, "user_role": "diretoria"})
+                st.rerun()
+            elif u == "Vanderlei" and s == "87654321":
+                st.session_state.update({"autenticado": True, "user_role": "diretoria"})
+                st.rerun()
+            # USUÁRIOS PADRÃO (SÓCIO E VISITANTE ADICIONAIS)
             elif u == "Socio" and s == "aro123":
                 st.session_state.update({"autenticado": True, "user_role": "socio"})
                 st.rerun()
