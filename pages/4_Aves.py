@@ -13,10 +13,13 @@ role_atual = str(st.session_state.get("user_role", "")).strip().lower()
 usuario_logado = str(st.session_state.get("username", "")).strip().lower()
 
 PATH_AVES = "backup_aves.pkl"
-
 usuarios_dinamicos = st.session_state.get("banco_usuarios_dinamicos", {})
-is_master_admin = role_atual in ["master", "diretoria", "admin"] or usuario_logado in ["master", "admin"]
-socio_vinculado = "Administração" if is_master_admin else usuarios_dinamicos.get(st.session_state.get("username"), {}).get("socio_vinculado", st.session_state.get("username"))
+
+# FIX: Master e Diretoria agora usam seu próprio username para suas aves pessoais, em vez de 'Administração'
+is_master_strict = role_atual == "master" or usuario_logado == "master"
+is_diretoria = role_atual in ["diretoria", "admin"] or usuario_logado in ["admin"]
+
+socio_vinculado = usuarios_dinamicos.get(st.session_state.get("username"), {}).get("socio_vinculado", st.session_state.get("username"))
 
 if "dados_aves_sistema" not in st.session_state:
     df_inicial = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha"])
@@ -36,12 +39,13 @@ with st.form("form_cadastro_ave", clear_on_submit=True):
     anilha_passaro = col3.text_input("Número da Anilha:")
     
     proprietario_final = socio_vinculado
-    if is_master_admin:
+    # Apenas o Master estrito ou Diretoria vê a caixa de escolher outro sócio se quiser, mas o padrão é o dele
+    if is_master_strict or is_diretoria:
         df_socios = st.session_state.get("dados_socios_internos", pd.DataFrame())
         lista_proprietarios = [st.session_state.get("username")]
         if not df_socios.empty and "Nome" in df_socios.columns: 
             lista_proprietarios.extend(df_socios["Nome"].dropna().tolist())
-        proprietario_final = st.selectbox("Proprietário?", [x for x in lista_proprietarios if x != ""])
+        proprietario_final = st.selectbox("Proprietário da Ave:", [x for x in lista_proprietarios if x != ""], index=0)
 
     if st.form_submit_button("Salvar Ave no Plantel", use_container_width=True):
         if nome_passaro.strip() and anilha_passaro.strip():
@@ -50,19 +54,19 @@ with st.form("form_cadastro_ave", clear_on_submit=True):
             with open(PATH_AVES, "wb") as f:
                 pickle.dump(st.session_state["dados_aves_sistema"], f)
             st.success("Ave cadastrada com sucesso!"); st.rerun()
+
 st.write("---")
 st.markdown("### 🏆 Aves Registradas no Sistema")
 
-# RESTRIÇÃO MUDADA AQUI: Apenas o perfil estrito de 'master' enxerga o banco de dados completo de todo mundo
-if role_atual == "master" or usuario_logado == "master":
+# FIX: Apenas o Master estrito enxerga o banco global. Diretoria e Sócios enxergam suas próprias aves vinculadas
+if is_master_strict:
     st.dataframe(df_aves, hide_index=True, use_container_width=True)
 else:
-    # Diretoria e Sócios comuns caem aqui e enxergam apenas as suas próprias aves vinculadas
     df_f = df_aves[df_aves["Proprietário"] == socio_vinculado] if not df_aves.empty else pd.DataFrame()
     st.dataframe(df_f, hide_index=True, use_container_width=True)
 
 # --- CENTRAL DE BACKUP DO PLANTEL EXCLUSIVA PARA O MASTER ---
-if role_atual == "master" or usuario_logado == "master":
+if is_master_strict:
     st.write("---")
     st.markdown("### 💾 Central de Segurança do Plantel (Exclusivo Master)")
     cb_exp, cb_imp = st.columns(2)
@@ -87,7 +91,7 @@ if role_atual == "master" or usuario_logado == "master":
                     st.session_state["dados_aves_sistema"] = aves_carregadas
                     with open(PATH_AVES, "wb") as f:
                         pickle.dump(aves_carregadas, f)
-                    st.success("Plantel geral restaurado e salvo em disco com sucesso!"); st.rerun()
+                    st.success("Plantel geral restaurado com sucesso!"); st.rerun()
             except: 
                 st.error("Arquivo inválido ou corrompido.")
 
