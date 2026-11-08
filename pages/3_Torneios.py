@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import datetime, random, io, pickle
+import datetime, random, io, pickle, os
 
 st.set_page_config(page_title="Torneios - ARO", page_icon="🦅", layout="wide")
 
@@ -10,23 +10,43 @@ if not st.session_state.get("autenticado", False):
 
 st.title("🦅 Gestão de Torneios - ARO Rio do Sul")
 
-# --- IDENTIFICAÇÃO DE PERMISSÕES SEM ERRO DE MAIÚSCULAS/MINÚSCULAS ---
+# --- IDENTIFICAÇÃO SEGURA DE PERMISSÕES ---
 role_atual = str(st.session_state.get("user_role", "")).strip().lower()
 usuario_logado = str(st.session_state.get("username", "")).strip().lower()
-
-# Admin se for master, diretoria ou o login clássico admin
 is_admin = role_atual in ["master", "diretoria", "admin"] or usuario_logado in ["master", "admin"]
 
 usuarios_dinamicos = st.session_state.get("banco_usuarios_dinamicos", {})
 socio_vinculado = "Administração" if is_admin else usuarios_dinamicos.get(st.session_state.get("username"), {}).get("socio_vinculado", st.session_state.get("username"))
 
-# Inicialização dos DataFrames globais na memória ativa
+# --- DEFINIÇÃO DOS ARQUIVOS FÍSICOS DE BACKUP ---
+ARQUIVO_CONFIRMADOS = "inscricoes_confirmadas.pkl"
+ARQUIVO_PENDENTES = "inscricoes_pendentes.pkl"
+
+# --- FUNÇÕES PARA CARREGAR E SALVAR DADOS NO DISCO ---
+def carregar_dados_fisicos():
+    if os.path.exists(ARQUIVO_CONFIRMADOS):
+        with open(ARQUIVO_CONFIRMADOS, "rb") as f:
+            st.session_state["dados_torneios_internos"] = pickle.load(f)
+    else:
+        st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
+
+    if os.path.exists(ARQUIVO_PENDENTES):
+        with open(ARQUIVO_PENDENTES, "rb") as f:
+            st.session_state["inscricoes_pendentes_aro"] = pickle.load(f)
+    else:
+        st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
+
+def salvar_dados_fisicos():
+    with open(ARQUIVO_CONFIRMADOS, "wb") as f:
+        pickle.dump(st.session_state["dados_torneios_internos"], f)
+    with open(ARQUIVO_PENDENTES, "wb") as f:
+        pickle.dump(st.session_state["inscricoes_pendentes_aro"], f)
+
+# Carrega os dados reais do arquivo físico na inicialização da página
+carregar_dados_fisicos()
+
 if "data_torneio_aro" not in st.session_state:
     st.session_state["data_torneio_aro"] = datetime.date(2026, 11, 8)
-if "dados_torneios_internos" not in st.session_state:
-    st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
-if "inscricoes_pendentes_aro" not in st.session_state:
-    st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
 
 especies_validas = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
 
@@ -38,7 +58,7 @@ if is_admin:
 else:
     st.markdown(f"### 📅 Torneio Dia: {st.session_state['data_torneio_aro'].strftime('%d/%m/%Y')}")
 
-# Captura os dados em tempo real
+# Captura tabelas do arquivo físico em tempo de execução
 df_inscritos_atual = st.session_state["dados_torneios_internos"]
 df_pendentes_atual = st.session_state["inscricoes_pendentes_aro"]
 
@@ -49,7 +69,7 @@ for i, esp in enumerate(especies_validas):
     cols[i].metric(label=esp, value=str(contagem[esp]))
 st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
-# --- FILA DE APROVAÇÃO (EXCLUSIVO MASTER / DIRETORIA / ADMIN) ---
+# --- FILA DE APROVAÇÃO (EXCLUSIVO ADMIN / MASTER / DIRETORIA) ---
 if is_admin:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
@@ -75,15 +95,17 @@ if is_admin:
                     nova_c = pd.DataFrame([{"Proprietário": row["Proprietário"], "Nome da Ave": row["Nome da Ave"], "Espécie": row["Espécie"], "Anilha": row["Anilha"], "Estaca": int(sorteio), "Valor": row["Valor"], "Clube": row["Clube"]}])
                     st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_c], ignore_index=True)
                     st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
-                    st.success("Aprovada!")
+                    salvar_dados_fisicos()
+                    st.success("Inscrição aprovada com sucesso!")
                     st.rerun()
                     
                 if c_b2.button("❌ Recusar", key=f"re_{idx}", use_container_width=True):
                     st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
-                    st.warning("Recusada!")
+                    salvar_dados_fisicos()
+                    st.warning("Inscrição recusada!")
                     st.rerun()
 
-# --- PAINEL: MINHAS INSCRIÇÕES (ACOMPANHAMENTO DO SÓCIO) ---
+# --- SEÇÃO: MINHAS INSCRIÇÕES (ACOMPANHAMENTO DO SÓCIO) ---
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
 lista_status = []
@@ -91,15 +113,15 @@ lista_status = []
 if not df_pendentes_atual.empty:
     filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
     for _, r in filtrado_p.iterrows():
-        lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando Aprovação", "Status": "Pendente"})
+        lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
 
 if not df_inscritos_atual.empty:
     filtrado_i = df_inscritos_atual[df_inscritos_atual["Proprietário"] == socio_vinculado]
     for _, r in filtrado_i.iterrows():
-        lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Confirmado"})
+        lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Inscrito Confirmado"})
 
 if len(lista_status) == 0:
-    st.caption("Você não possui nenhuma solicitação de inscrição para este torneio.")
+    st.caption("Você não possui nenhuma ave cadastrada neste torneio até o momento.")
 else:
     st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
@@ -110,7 +132,7 @@ df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
 df_disp = df_plantel if is_admin else (df_plantel[df_plantel["Proprietário"] == socio_vinculado] if not df_plantel.empty else pd.DataFrame())
 
 if df_disp.empty:
-    st.warning("⚠️ Nenhuma ave encontrada no seu plantel. Cadastre suas aves na aba correspondente primeiro.")
+    st.warning("⚠️ Nenhuma ave encontrada no seu plantel. Cadastre as aves antes na aba correspondente.")
 else:
     with st.form("form_sol_insc", clear_on_submit=False):
         lista_opcoes = [f"{r['Nome da Ave']} ({r['Espécie']}) - Anilha: {r['Anilha']} | Dono: {r['Proprietário']}" for _, r in df_disp.iterrows()]
@@ -130,11 +152,12 @@ else:
                 "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"
             }])
             
-            st.session_state["inscricoes_pendentes_aro"] = pd.concat([st.session_state["inscricoes_pendentes_aro"], nova_s], ignore_index=True)
-            st.success("🎯 Solicitado com sucesso! Veja o status na tabela 'Minhas Inscrições'.")
+            st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
+            salvar_dados_fisicos()
+            st.success("🎯 Solicitado com sucesso! Verifique a tabela acima.")
             st.rerun()
 
-# --- COMPETIDORES CONFIRMADOS EM ABAS ---
+# --- VISUALIZAÇÃO GERAL DE CONFIRMADOS (ABAS) ---
 st.write("---")
 st.markdown("### 🏆 Competidores Confirmados por Categoria")
 abas = st.tabs(especies_validas)
@@ -146,34 +169,19 @@ for i, esp in enumerate(especies_validas):
         else: 
             st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
 
-# --- SISTEMA DE BACKUPS (ADMIN / MASTER / DIRETORIA) ---
-if is_admin:
-    st.write("---")
-    st.markdown("### 💾 Central de Backups (.PKL)")
-    cb1, cb2 = st.columns(2)
-    with cb1:
-        dados_e = {"confirmados": df_inscritos_atual, "pendentes": df_pendentes_atual, "data": st.session_state["data_torneio_aro"]}
-        st.download_button("📥 Baixar Arquivo de Inscrições", data=pickle.dumps(dados_e), file_name="backup_torneio_aro.pkl", mime="application/octet-stream", use_container_width=True)
-    with cb2:
-        arq_t = st.file_uploader("Subir Backup Existente:", type=["pkl"], key="up_t")
-        if arq_t is not None:
-            try:
-                dados_i = pickle.load(arq_t)
-                if st.button("🔄 Confirmar Restauração Global", use_container_width=True, type="primary"):
-                    st.session_state["dados_torneios_internos"] = dados_i["confirmados"]
-                    st.session_state["inscricoes_pendentes_aro"] = dados_i["pendentes"]
-                    st.session_state["data_torneio_aro"] = dados_i["data"]
-                    st.success("Sistema restaurado!")
-                    st.rerun()
-            except: 
-                st.error("Arquivo inválido.")
-
-# --- EXCLUSÃO MANUAL DE INSCRITOS (EXCLUSIVO PROFILE MASTER) ---
-if role_atual == "master" and not df_inscritos_atual.empty:
+# --- CONFIGURAÇÕES ADMINISTRATIVAS E EXCLUSÃO (EXCLUSIVO MASTER) ---
+if role_atual == "master":
     st.write("---")
     st.markdown("### 🗑️ Cancelamento Manual de Inscrição")
-    opc = [f"[{r['Espécie']}] Estaca {r['Estaca']} - {r['Nome da Ave']} ({r['Proprietário']})" for _, r in df_inscritos_atual.iterrows()]
-    sel = st.selectbox("Escolha a ave registrada para remover:", opc)
-    if st.checkbox("Confirmar a exclusão permanente deste registro"):
-        if st.button("❌ Remover do Torneio", use_container_width=True):
-            idx_del = opc.index(sel)
+    if not df_inscritos_atual.empty:
+        opc = [f"[{r['Espécie']}] Estaca {r['Estaca']} - {r['Nome da Ave']} ({r['Proprietário']})" for _, r in df_inscritos_atual.iterrows()]
+        sel = st.selectbox("Escolha a ave registrada para remover:", opc)
+        if st.checkbox("Li e aceito excluir permanentemente esta vaga"):
+            if st.button("❌ Remover do Torneio", use_container_width=True):
+                idx_del = opc.index(sel)
+                st.session_state["dados_torneios_internos"] = df_inscritos_atual.drop(df_inscritos_atual.index[idx_del]).reset_index(drop=True)
+                salvar_dados_fisicos()
+                st.success("Registro apagado!")
+                st.rerun()
+    else:
+        st.caption("Nenhum competidor confirmado para exclusão.")
