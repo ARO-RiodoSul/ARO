@@ -4,22 +4,17 @@ import datetime
 import random
 from PIL import Image, ImageDraw
 import io
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from reportlab.pdfgen import canvas
 
 st.set_page_config(page_title="Torneios - Painel ARO", page_icon="🦅", layout="wide")
 st.title("🦅 Gestão de Torneios - ARO Rio do Sul")
 
 is_master = st.session_state.get("user_role") == "master"
 
-if "data_torneio_aro" not in st.session_state or st.session_state["data_torneio_aro"] is None:
+if "data_torneio_aro" not in st.session_state:
     st.session_state["data_torneio_aro"] = datetime.date(2026, 12, 6)
-elif isinstance(st.session_state["data_torneio_aro"], str):
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            st.session_state["data_torneio_aro"] = datetime.datetime.strptime(st.session_state["data_torneio_aro"], fmt).date()
-            break
-        except ValueError:
-            continue
-
 if "torneio_inscricoes_aro" not in st.session_state:
     st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor"])
 
@@ -28,14 +23,12 @@ df_inscritos = st.session_state["torneio_inscricoes_aro"]
 # --- 1. DATA EDITÁVEL ---
 st.markdown("### 📅 Cronograma do Evento")
 if is_master:
-    nova_data = st.date_input("Data do Torneio:", value=st.session_state["data_torneio_aro"], format="DD/MM/YYYY", key="edit_data_torneio")
+    nova_data = st.date_input("Data do Torneio:", value=st.session_state["data_torneio_aro"], format="DD/MM/YYYY")
     if nova_data != st.session_state["data_torneio_aro"]:
         st.session_state["data_torneio_aro"] = nova_data
         st.rerun()
 else:
     st.markdown(f"**Torneio Dia:** {st.session_state['data_torneio_aro'].strftime('%d/%m/%Y')}")
-
-st.write("---")
 
 # --- 2. CONTADORES LIMPOS ---
 st.markdown("### 📊 Estatísticas de Inscrição")
@@ -48,8 +41,6 @@ total_geral = sum(contagem.values())
 cols = st.columns(6)
 for i, esp in enumerate(especies_validas):
     cols[i].metric(label=icones_especies[esp], value=str(contagem[esp]))
-
-st.write("")
 st.info(f"✨ **TOTAL DE GAIOLAS / AVES INSCRITAS:** {total_geral}")
 st.write("---")
 
@@ -71,7 +62,6 @@ if is_master:
                 sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else limite + 1)
                 
                 valor_ficha = 25.00 if socio_op == "Sim" else 35.00
-                
                 nova = pd.DataFrame([{"Proprietário": p.strip(), "Nome da Ave": n.strip(), "Espécie": e, "Anilha": a.strip(), "Estaca": int(sorteio), "Valor": valor_ficha}])
                 st.session_state["torneio_inscricoes_aro"] = pd.concat([df_inscritos, nova], ignore_index=True)
                 st.success(f"Sucesso! Ave inscrita na Estaca: {sorteio}")
@@ -91,43 +81,54 @@ for i, esp in enumerate(especies_validas):
         else:
             st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Taxa (R$)", format="%.2f")}, use_container_width=True)
 
-# --- 5. IMPRESSÃO DE FICHAS DE GAIOLA (10x7 cm) ---
+# --- 5. EXPORTAÇÃO DIRETA EM PDF P&B (10x7cm) ---
+def gerar_pdf_fichas(df_dados):
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    df_ordenado = df_dados.sort_values(by=["Espécie", "Estaca"])
+    
+    largura_f, altura_f = 10 * cm, 7 * cm
+    margem_x, margem_y = 0.5 * cm, 2.0 * cm
+    x_atual, y_atual = 0, 0
+    
+    for _, row in df_ordenado.iterrows():
+        px = margem_x + (x_atual * largura_f)
+        py = margem_y + (y_atual * altura_f)
+        
+        pdf.setLineWidth(1)
+        pdf.setStrokeColorRGB(0, 0, 0)
+        pdf.rect(px, py, largura_f, altura_f)
+        
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawCentredString(px + (largura_f/2), py + altura_f - 12, "ARO RIO DO SUL - TORNEIO OFICIAL")
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawCentredString(px + (largura_f/2), py + altura_f - 30, f"ESTACA: {int(row['Estaca']):02d}")
+        
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(px + 10, py + altura_f - 45, f"Espécie: {str(row['Espécie']).upper()}")
+        pdf.drawString(px + 10, py + altura_f - 58, f"Ave: {str(row['Nome da Ave'])}")
+        pdf.drawString(px + 10, py + altura_f - 71, f"Criador: {str(row['Proprietário'])}")
+        pdf.drawString(px + 10, py + altura_f - 84, f"Anilha: {str(row['Anilha'])}")
+        
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.drawRightString(px + largura_f - 10, py + 10, f"VALOR: R$ {float(row['Valor']):.2f}")
+        
+        x_atual += 1
+        if x_atual >= 2:
+            x_atual = 0
+            y_atual += 1
+            if y_atual >= 3:
+                y_atual = 0
+                pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
 if is_master and not df_inscritos.empty:
     st.write("---")
-    st.markdown("### 🖨️ Fichas de Gaiola para Impressão (10x7 cm)")
-    
-    if st.button("📄 Gerar Bloco de Fichas Prontos para Impressão", use_container_width=True):
-        st.success("Fichas estruturadas com sucesso abaixo! Pressione Ctrl+P no teclado para imprimir.")
-        st.write("---")
-        
-        df_fichas = df_inscritos.sort_values(by=["Espécie", "Estaca"])
-        
-        st.markdown("""
-        <style>
-            .grid-fichas { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-            .ficha { width: 10cm; height: 7cm; border: 2px solid #D4AF37; padding: 8px; box-sizing: border-box; background-color: #FAFAFA; color: #111; font-family: sans-serif; overflow: hidden; }
-            .ficha-header { text-align: center; font-weight: bold; border-bottom: 2px solid #111; padding-bottom: 2px; margin-bottom: 4px; font-size: 13px; }
-            .ficha-estaca { font-size: 20px; font-weight: bold; text-align: center; color: #D4AF37; background: #111; padding: 2px; border-radius: 4px; margin-bottom: 6px; }
-            .ficha-linha { font-size: 12px; margin-bottom: 3px; border-bottom: 1px dashed #ccc; padding-bottom: 1px; }
-            .ficha-valor { font-size: 13px; font-weight: bold; text-align: right; color: #B22222; margin-top: 5px; }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        conteudo_html = '<div class="grid-fichas">'
-        for _, row in df_fichas.iterrows():
-            conteudo_html += f"""
-            <div class="ficha">
-                <div class="ficha-header">ARO RIO DO SUL - TORNEIO OFICIAL</div>
-                <div class="ficha-estaca">ESTACA / GAIOLA: {int(row['Estaca']):02d}</div>
-                <div class="ficha-linha"><b>Espécie:</b> {row['Espécie'].upper()}</div>
-                <div class="ficha-linha"><b>Canário/Ave:</b> {row['Nome da Ave']}</div>
-                <div class="ficha-linha"><b>Criador:</b> {row['Proprietário']}</div>
-                <div class="ficha-linha"><b>Nº Anilha:</b> {row['Anilha']}</div>
-                <div class="ficha-valor">VALOR A PAGAR: R$ {float(row['Valor']):,.2f}</div>
-            </div>
-            """
-        conteudo_html += '</div>'
-        st.markdown(conteudo_html, unsafe_allow_html=True)
+    st.markdown("### 🖨️ Fichas Adesivas em PDF (Preto e Branco)")
+    pdf_data = gerar_pdf_fichas(df_inscritos)
+    st.download_button(label="📥 Baixar Fichas em PDF para Adesivo (P&B)", data=pdf_data, file_name="fichas_adesivas_aro.pdf", mime="application/pdf", use_container_width=True)
 
 # --- 6. IMAGEM WHATSAPP ---
 def criar_imagem(dt, mapa, total):
@@ -138,9 +139,6 @@ def criar_imagem(dt, mapa, total):
     draw.text((W/2, 50), "ARO - RIO DO SUL", fill="#D4AF37", anchor="mm", font_size=26)
     draw.text((W/2, 90), f"TORNEIO DIA: {dt}", fill="#FFFFFF", anchor="mm", font_size=20)
     draw.line([40, 130, W-40, 130], fill="#D4AF37", width=2)
-    draw.text((50, 145), "ESPÉCIE", fill="#D4AF37", font_size=16)
-    draw.text((W-50, 145), "QUANTIDADE", fill="#D4AF37", anchor="ra", font_size=16)
-    draw.line([40, 175, W-40, 175], fill="#D4AF37", width=1)
     y = 190
     for esp, qtd in mapa.items():
         draw.text((50, y), esp.upper(), fill="#FFFFFF", font_size=16)
@@ -181,5 +179,5 @@ if is_master:
     if st.checkbox("💥 CONFIRMAR EXCLUSÃO DE TODOS OS INSCRITOS", key="chk_reset"):
         if st.button("🗑️ ZERAR TORNEIO COMPLETO", type="primary", use_container_width=True):
             st.session_state["torneio_inscricoes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor"])
-            st.warning("Torneio resetado com sucesso!")
+            st.warning("Torneio resetado!")
             st.rerun()
