@@ -29,13 +29,16 @@ if not st.session_state["autenticado"]:
         if st.form_submit_button("Entrar"):
             u_f = u_input.lower()
             
-            # 1. PERMISSÃO MASTER (JUNIOR REBELO)
-            if u_input == "Junior Rebelo" and s_input == "270688":
+            # 1. PERMISSÃO MASTER (JUNIOR REBELO) - SENHA ATUALIZADA
+            if u_input == "Junior Rebelo" and s_input == "05090411":
                 st.session_state.update({"autenticado": True, "user_role": "master", "username": "Junior Rebelo"})
                 st.rerun()
                 
-            # 2. USUÁRIOS FIXOS DA DIRETORIA
-            elif u_f in ["kleven", "valter", "peterson", "mauro"] and s_input == {"kleven": "12345678", "valter": "021277", "peterson": "100693", "mauro": "120660"}[u_f]:
+            # 2. USUÁRIOS FIXOS DA DIRETORIA - SENHA DO KLEVEN ATUALIZADA
+            elif u_f == "kleven" and s_input == "091196":
+                st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": "Kleven"})
+                st.rerun()
+            elif u_f in ["valter", "peterson", "mauro"] and s_input == {"valter": "021277", "peterson": "100693", "mauro": "120660"}[u_f]:
                 st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": u_f.capitalize()})
                 st.rerun()
             elif u_f == "vanderlei" and s_input == "251073":
@@ -66,6 +69,8 @@ if "dados_socios_internos" not in st.session_state:
     else:
         st.session_state["dados_socios_internos"] = pd.DataFrame(columns=["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"])
 
+df_socios_global = st.session_state["dados_socios_internos"]
+
 c_l, c_t, c_o = st.columns(3)
 try:
     if os.path.exists(LOGO_PATH): c_l.image(LOGO_PATH, width=80)
@@ -91,10 +96,9 @@ if role == "master":
     st.markdown("### 📊 Painel de Controle de Usuários e Senhas")
     st.caption("🔒 Visão exclusiva do Administrador Master. Sócios e Diretores não têm acesso a esta tabela.")
     
-    # Monta a lista com os dados exatos do código para seu controle visual na tela
     dados_usuarios_sistema = [
-        {"Usuário / Login": "Junior Rebelo", "Senha": "    270688", "Categoria / Nível": "MASTER (ADMINISTRADOR)"},
-        {"Usuário / Login": "Kleven", "Senha": "12345678", "Categoria / Nível": "DIRETORIA"},
+        {"Usuário / Login": "Junior Rebelo", "Senha": "05090411", "Categoria / Nível": "MASTER (ADMINISTRADOR)"},
+        {"Usuário / Login": "Kleven", "Senha": "091196", "Categoria / Nível": "DIRETORIA"},
         {"Usuário / Login": "Valter", "Senha": "021277", "Categoria / Nível": "DIRETORIA"},
         {"Usuário / Login": "Peterson", "Senha": "100693", "Categoria / Nível": "DIRETORIA"},
         {"Usuário / Login": "Mauro", "Senha": "120660", "Categoria / Nível": "DIRETORIA"},
@@ -105,3 +109,4 @@ if role == "master":
     
     df_usuarios_fixos = pd.DataFrame(dados_usuarios_sistema)
     st.dataframe(df_usuarios_fixos, use_container_width=True, hide_index=True)
+
