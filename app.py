@@ -2,19 +2,24 @@ import streamlit as st
 import pandas as pd
 import os, pickle
 
+# CONFIGURAÇÃO DO APP E ÍCONE DO NAVEGADOR
 st.set_page_config(page_title="Painel - ARO Rio do Sul", page_icon="logo.png" if os.path.exists("logo.png") else "📊", layout="wide")
+
+# TRAVA PARA FORÇAR A LOGO E NOME NO CELULAR
 st.markdown("""<head><title>ARO</title><link rel="apple-touch-icon" href="app/static/logo.png"><link rel="icon" type="image/png" href="app/static/logo.png"></head>""", unsafe_allow_html=True)
 
-# CAMINHOS ABSOLUTOS SEGUROS CONTRA ERROS DE ESCRITA
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PATH_USUARIOS = os.path.join(BASE_DIR, "backup_usuarios.pkl")
-PATH_SOCIOS = os.path.join(BASE_DIR, "backup_socios.csv")
+# CAMINHOS ABSOLUTOS PADRONIZADOS NA RAIZ DO PROJETO
+PATH_USUARIOS = os.path.abspath("backup_usuarios.pkl")
+PATH_SOCIOS = os.path.abspath("backup_socios.csv")
 
+# --- INICIALIZAÇÃO DO BANCO DE LOGINS DINÂMICOS ---
 if "banco_usuarios_dinamicos" not in st.session_state:
     if os.path.exists(PATH_USUARIOS):
         try:
-            with open(PATH_USUARIOS, "rb") as f: st.session_state["banco_usuarios_dinamicos"] = pickle.load(f)
-        except: st.session_state["banco_usuarios_dinamicos"] = {}
+            with open(PATH_USUARIOS, "rb") as f: 
+                st.session_state["banco_usuarios_dinamicos"] = pickle.load(f)
+        except: 
+            st.session_state["banco_usuarios_dinamicos"] = {}
     else:
         st.session_state["banco_usuarios_dinamicos"] = {
             "Socio": {"senha": "aro123", "role": "socio", "socio_vinculado": "Nenhum"},
@@ -39,23 +44,23 @@ if not st.session_state["autenticado"]:
         s = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
             if u == "Junior Rebelo" and s == "270688":
-                st.session_state.update({"autenticado": True, "user_role": "master"})
+                st.session_state.update({"autenticado": True, "user_role": "master", "username": "Junior Rebelo"})
                 st.rerun()
             elif u in ["Kleven", "Valter", "Peterson", "Mauro"] and s == {"Kleven": "12345678", "Valter": "021277", "Peterson": "100693", "Mauro": "120660"}[u]:
-                st.session_state.update({"autenticado": True, "user_role": "diretoria"})
+                st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": u})
                 st.rerun()
             elif u == "Vanderlei" and s == "251073":
-                st.session_state.update({"autenticado": True, "user_role": "diretoria"})
+                st.session_state.update({"autenticado": True, "user_role": "diretoria", "username": "Vanderlei"})
                 st.rerun()
             elif u in usuarios_cadastrados and usuarios_cadastrados[u]["senha"] == s:
-                st.session_state.update({"autenticado": True, "user_role": usuarios_cadastrados[u]["role"]})
+                st.session_state.update({"autenticado": True, "user_role": usuarios_cadastrados[u]["role"], "username": u})
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
                 
     st.write("<p style='text-align: center; color: gray; margin: 5px 0;'>Ou se você é apenas um visitante do evento:</p>", unsafe_allow_html=True)
     if st.button("🌐 Entrar como Convidado / Visitante", use_container_width=True):
-        st.session_state.update({"autenticado": True, "user_role": "visitante"})
+        st.session_state.update({"autenticado": True, "user_role": "visitante", "username": "Visitante Convidado"})
         st.rerun()
     st.stop()
 
@@ -84,7 +89,12 @@ else: st.info("ℹ️ Modo Visitante: Acesso Limitado Ativado")
 
 st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🦅 Bem-vindo ao Sistema Oficial ARO</h2>", unsafe_allow_html=True)
 
-# --- CENTRAL DE CADASTRO E EXCLUSÃO DINÂMICA DE LOGINS (EXCLUSIVO MASTER) ---
+if role in ["master", "diretoria"]:
+    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para navegar entre as planilhas de Sócios, Finanças e Torneios.</p>", unsafe_allow_html=True)
+else:
+    st.markdown("<p style='text-align: center; color: #6B7280;'>Utilize o menu lateral à esquerda para visualizar a página de **Torneios**.</p>", unsafe_allow_html=True)
+
+# --- CENTRAL DE CADASTRO E EXCLUSÃO DINÂMICA DE LOGINS ---
 if role == "master":
     st.write("---")
     st.markdown("### 🔑 Central de Gerenciamento de Acessos")
@@ -107,9 +117,9 @@ if role == "master":
             if st.form_submit_button("Salvar Usuário", use_container_width=True):
                 if novo_u.strip() and novo_s.strip():
                     if novo_u.strip() in ["Junior Rebelo", "Kleven", "Valter", "Peterson", "Mauro", "Vanderlei"]:
-                        st.error("Nome de usuário reservado para a administração fixa!")
+                        st.error("Nome de usuário reservado!")
                     elif tipo_role == "Sócio" and socio_vinc == "Selecione o Sócio...":
-                        st.error("Selecione qual sócio oficial será vinculado a este login!")
+                        st.error("Selecione qual sócio oficial será vinculado!")
                     else:
                         st.session_state["banco_usuarios_dinamicos"][novo_u.strip()] = {"senha": novo_s.strip(), "role": "socio" if tipo_role == "Sócio" else "visitante", "socio_vinculado": socio_vinc}
                         try:
@@ -117,7 +127,7 @@ if role == "master":
                             st.success("Usuário salvo com sucesso!")
                             st.rerun()
                         except: st.error("Erro ao gravar arquivo físico de backup.")
-                else: st.error("Preencha todos os campos do formulário!")
+                else: st.error("Preencha todos os campos!")
                     
     with col_cad_2:
         st.markdown("**Usuários Cadastrados Ativos**")
@@ -138,6 +148,6 @@ if role == "master":
                         st.success("Usuário excluído!")
                         st.rerun()
                     except: st.error("Erro ao atualizar o backup.")
-                else: st.error("Marque o quadrado de confirmação antes de deletar!")
+                else: st.error("Marque a confirmação!")
         else:
-            st.caption("Nenhum usuário dinâmico ativo no momento.")
+            st.caption("Nenhum usuário dinâmico ativo.")
