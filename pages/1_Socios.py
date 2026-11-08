@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import io
+import io, os
 
 st.set_page_config(page_title="Sócios - Painel ARO", page_icon="👥", layout="wide")
 
@@ -14,24 +14,36 @@ if role_atual not in ["master", "diretoria", "admin"] and usuario_logado not in 
 st.title("👥 Cadastro de Sócios - ARO Rio do Sul")
 is_master = role_atual in ["master", "admin"] or usuario_logado in ["master", "admin"]
 
-# --- VARIÁVEL GLOBAL VERDADEIRA (COMPARTILHADA ENTRE TODOS OS USUÁRIOS E DISPOSITIVOS) ---
-if "BANCO_GLOBAL_SOCIOS" not in st.session_state.__class__.__dict__:
-    # Lista inicial fixa e imutável que serve como base do sistema
+ARQUIVO_SOCIOS = "backup_socios_oficial.csv"
+
+# FUNÇÃO NATIVA COMPARTILHADA ENTRE TODOS OS USUÁRIOS E CELULARES
+@st.cache_resource
+def obter_ponte_banco_socios():
+    if os.path.exists(ARQUIVO_SOCIOS):
+        try:
+            return pd.read_csv(ARQUIVO_SOCIOS)
+        except:
+            pass
+    # Se o arquivo não existir (primeira execução ou reboot limpo), inicia com seus sócios reais
     dados_iniciais = [
         {"Número": 1, "ID": "25151", "Nome": "Carolina Leandro", "Telefone": "47-996331899", "CPF": "7033276907", "CTF": "5455", "Status": "Ativo"},
         {"Número": 2, "ID": "51515", "Nome": "Pedro Paulo", "Telefone": "47-1252", "CPF": "25255", "CTF": "25255", "Status": "Ativo"},
     ]
-    # Força a criação de um dicionário no nível do servidor (Application State)
-    st.session_state.__class__.__dict__["BANCO_GLOBAL_SOCIOS"] = pd.DataFrame(dados_iniciais)
+    df = pd.DataFrame(dados_iniciais)
+    df.to_csv(ARQUIVO_SOCIOS, index=False)
+    return df
 
-# Vincula a tabela local à memória global unificada do servidor
-df_socios = st.session_state.__class__.__dict__["BANCO_GLOBAL_SOCIOS"]
+# Sincroniza a memória viva de todas as sessões com o arquivo mestre
+if "df_socios_memoria" not in st.session_state:
+    st.session_state["df_socios_memoria"] = obter_ponte_banco_socios()
+
+df_socios = st.session_state["df_socios_memoria"]
 
 if not df_socios.empty:
     df_socios["Número"] = pd.to_numeric(df_socios["Número"], errors='coerce').fillna(1).astype(int)
 
 if is_master:
-    st.markdown("### 📝 Registrar Novo Membro (Sincronização Global)")
+    st.markdown("### 📝 Registrar Novo Membro (Sincronizado)")
     with st.form("form_novo_socio", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
         col_f4, col_f5, col_f6 = st.columns(3)
@@ -50,13 +62,13 @@ if is_master:
                     "Número": int(proximo_no), "ID": id_aro.strip(), "Nome": nome_socio.strip(),
                     "Telefone": tel_socio.strip(), "CPF": cpf_socio.strip(), "CTF": ctf_socio.strip(), "Status": status_socio
                 }])
-                # Grava direto na memória master compartilhada do servidor
-                st.session_state.__class__.__dict__["BANCO_GLOBAL_SOCIOS"] = pd.concat([df_socios, novo_registro], ignore_index=True)
-                st.success(f"Sócio '{nome_socio.strip()}' cadastrado com sucesso no servidor!")
+                df_atualizado = pd.concat([df_socios, novo_registro], ignore_index=True)
+                df_atualizado.to_csv(ARQUIVO_SOCIOS, index=False)
+                st.session_state["df_socios_memoria"] = df_atualizado
+                st.success(f"Sócio '{nome_socio.strip()}' cadastrado com sucesso!")
                 st.rerun()
             else:
                 st.error("Preencha o campo 'Nome Completo'!")
-
 st.write("---")
 st.markdown("### 📊 Listagem de Sócios Cadastrados")
 
@@ -100,21 +112,21 @@ with col_back_2:
                 colunas_obrigatorias = ["Número", "ID", "Nome", "Telefone", "CPF", "CTF", "Status"]
                 if all(col in df_importado.columns for col in colunas_obrigatorias):
                     if st.button("🔄 Confirmar Carregamento Global", use_container_width=True, type="primary"):
-                        # Atualiza a memória global do servidor para todos os celulares na hora
-                        st.session_state.__class__.__dict__["BANCO_GLOBAL_SOCIOS"] = df_importado
-                        st.success("Banco de dados atualizado globalmente para todos os usuários!")
+                        df_importado.to_csv(ARQUIVO_SOCIOS, index=False)
+                        st.session_state["df_socios_memoria"] = df_importado
+                        st.success("Banco de dados sincronizado e compartilhado!")
                         st.rerun()
                 else:
-                    st.error("⚠️ Colunas inválidas.")
+                    st.error("⚠️ Colunas oficiais não encontradas.")
             except:
-                st.error("Erro ao ler CSV.")
+                st.error("Erro ao ler o arquivo enviado.")
 
 if is_master and not df_socios.empty:
     st.write("---")
-    st.markdown("### 🗑️ Remover Membro do Sistema (Sessão Atual)")
+    st.markdown("### 🗑️ Remover Membro do Sistema")
     lista_opcoes_del = [f"Nº {r['Número']} - {r['Nome']} (ID: {r['ID']})" for _, r in df_socios.iterrows()]
     socio_para_deletar = st.selectbox("Selecione o sócio que deseja apagar:", lista_opcoes_del)
-    confirmar_del_socio = st.checkbox("Confirmo que desejo excluir da visualização")
+    confirmar_del_socio = st.checkbox("Confirmo que desejo excluir permanentemente")
     
     if st.button("❌ Deletar Sócio Selecionado", use_container_width=True):
         if confirmar_del_socio:
@@ -122,9 +134,9 @@ if is_master and not df_socios.empty:
             df_remanescente = df_socios.drop(df_socios.index[posicao]).reset_index(drop=True)
             if not df_remanescente.empty:
                 df_remanescente["Número"] = list(range(1, len(df_remanescente) + 1))
-            st.session_state.__class__.__dict__["BANCO_GLOBAL_SOCIOS"] = df_remanescente
-            st.success("Removido do servidor com sucesso!")
+            df_remanescente.to_csv(ARQUIVO_SOCIOS, index=False)
+            st.session_state["df_socios_memoria"] = df_remanescente
+            st.success("Membro removido com sucesso!")
             st.rerun()
         else:
-            st.error("Marque a caixa de confirmação!")
-
+            st.error("Marque a caixa de confirmação de segurança!")
