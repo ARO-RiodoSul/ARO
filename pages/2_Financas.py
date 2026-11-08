@@ -2,13 +2,19 @@ import streamlit as st
 import pandas as pd
 import datetime
 
-# Configuração da página
+# CONFIGURAÇÃO DA PÁGINA (Sempre o primeiro comando)
 st.set_page_config(page_title="Finanças - Painel ARO", page_icon="💰", layout="wide")
+
+# --- TRAVA DE SEGURANÇA POR CATEGORIA DE USUÁRIO ---
+# Só permite o acesso para Master e Diretoria. Bloqueia Sócios e Visitantes.
+if st.session_state.get("user_role") not in ["master", "diretoria"]:
+    st.error("🔒 Acesso Restrito! Esta página é exclusiva para membros do nível Master ou Diretoria.")
+    st.stop() # Interrompe o carregamento do restante do arquivo na tela
 
 # Título do Módulo
 st.title("💰 Fluxo de Caixa - ARO Rio do Sul")
 
-# AJUSTE NA VALIDAÇÃO: Valida diretamente pela função/role atribuída no app.py
+# Validar se o usuário possui nível Master para liberar a edição de campos administrativos
 is_master = st.session_state.get("user_role") == "master"
 
 # Inicializar dados financeiros no session_state se não existirem
@@ -109,8 +115,8 @@ with col_mes_3:
 st.write("")
 st.markdown(f"**Tabela de Movimentações - {mes_selecionado}**")
 
+# Regra de edição: Apenas o Master edita e usa a duplicação dinâmica de dias. Diretoria apenas visualiza.
 if is_master:
-    # num_rows="dynamic" permite clicar em "+" no rodapé
     df_editado = st.data_editor(
         df_atual,
         hide_index=True,
@@ -129,10 +135,10 @@ if is_master:
     if not df_editado.equals(df_atual):
         df_editado["Dia"] = pd.to_numeric(df_editado["Dia"], errors='coerce')
         df_editado = df_editado.dropna(subset=["Dia"]).sort_values(by="Dia").reset_index(drop=True)
-        
         st.session_state["financas_data"]["meses"][mes_selecionado] = df_editado
         st.rerun()
 else:
+    # A diretoria entra aqui: consegue ver todos os dados do caixa mas sem permissão de alterar nada
     st.dataframe(
         df_atual,
         hide_index=True,
@@ -141,42 +147,6 @@ else:
             "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="%.2f"),
             "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="%.2f"),
             "Motivo": "Motivo/Descrição"
-        }
+        },
+        use_container_width=True
     )
-
-# --- 3. RECURSO DE RELATÓRIO IMPRESSO COMPLETO (Exclusivo Master) ---
-if is_master:
-    st.write("---")
-    st.markdown("### 🖨️ Relatórios do Sistema")
-    
-    if st.button("Gerar Relatório de Impressão Completo", use_container_width=True):
-        st.success("Relatório gerado com sucesso logo abaixo! Pressione Ctrl+P no seu teclado para imprimir ou salvar em PDF.")
-        st.write("---")
-        
-        # Cabeçalho Geral Imprimível
-        st.markdown("<h2 style='text-align: center;'>🦅 RELATÓRIO FINANCEIRO INTEGRADO - ARO RIO DO SUL</h2>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center;'><b>Data de Emissão:</b> {datetime.date.today().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
-        st.write(f"**Saldo Anterior Geral:** R$ {saldo_anterior:,.2f}")
-        st.write(f"**Total Acumulado de Entradas:** R$ {total_entradas_geral:,.2f}")
-        st.write(f"**Total Acumulado de Saídas:** R$ {total_saidas_geral:,.2f}")
-        st.write(f"**Saldo Total de Caixa:** R$ {saldo_total:,.2f}")
-        st.write("---")
-        
-        # Listar mês a mês com quebra de página HTML para a impressora
-        for m in lista_meses:
-            df_m = st.session_state["financas_data"]["meses"][m]
-            
-            st.markdown(f"### 📅 Período: {m}")
-            if df_m is not None and not df_m.empty:
-                # Formatação visual limpa para as tabelas impressas
-                df_impressao = df_m.copy()
-                df_impressao["Dia"] = df_impressao["Dia"].astype(int)
-                df_impressao["Entradas (R$)"] = df_impressao["Entradas"].map(lambda x: f"R$ {float(x):,.2f}" if pd.notna(x) and x != "" else "R$ 0,00")
-                df_impressao["Saídas (R$)"] = df_impressao["Saídas"].map(lambda x: f"R$ {float(x):,.2f}" if pd.notna(x) and x != "" else "R$ 0,00")
-                
-                st.table(df_impressao[["Dia", "Entradas (R$)", "Saídas (R$)", "Motivo"]].rename(columns={"Motivo": "Motivo/Descrição"}))
-            else:
-                st.caption("Nenhum lançamento efetuado neste mês.")
-            
-            # Comando invisível que avisa o navegador para pular para a próxima página na impressão física
-            st.markdown("<div style='page-break-after: always;'></div>", unsafe_allow_html=True)
