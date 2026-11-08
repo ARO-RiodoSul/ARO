@@ -72,7 +72,30 @@ if is_admin:
                     st.warning("Recusada!")
                     st.rerun()
 
-# --- FORMULÁRIO DE INSCRIÇÃO CORRIGIDO ---
+# --- FUNÇÃO CALLBACK (RODA ANTES DE QUALQUER RESET DE INTERFACE) ---
+def processar_solicitacao_inscricao(df_dados_origem, opcoes_lista):
+    # Recupera o que foi selecionado usando o estado das chaves
+    selecionado = st.session_state.get("input_ave_selecionada")
+    is_socio = st.session_state.get("input_is_socio_clube")
+    
+    if selecionado and selecionado in opcoes_lista:
+        idx_real = opcoes_lista.index(selecionado)
+        ave_obj = df_dados_origem.iloc[idx_real]
+        
+        nova_s = pd.DataFrame([{
+            "Proprietário": ave_obj["Proprietário"], 
+            "Nome da Ave": ave_obj["Nome da Ave"], 
+            "Espécie": ave_obj["Espécie"], 
+            "Anilha": ave_obj["Anilha"], 
+            "Valor": 25.0 if is_socio == "Sim" else 35.0, 
+            "Clube": "ARO" if is_socio == "Sim" else "Outro"
+        }])
+        
+        # Altera o estado da aplicação na raiz do backend antes do Streamlit remontar a tela
+        st.session_state["inscricoes_pendentes_aro"] = pd.concat([st.session_state["inscricoes_pendentes_aro"], nova_s], ignore_index=True)
+        st.session_state["sucesso_envio_torneio"] = True
+
+# --- FORMULÁRIO DE INSCRIÇÃO BLINDADO ---
 st.write("---")
 st.markdown("### 📝 Solicitar Inscrição de Ave")
 df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
@@ -81,29 +104,24 @@ df_disp = df_plantel if is_admin else (df_plantel[df_plantel["Proprietário"] ==
 if df_disp.empty:
     st.warning("⚠️ Nenhuma ave cadastrada no seu plantel. Cadastre suas aves na página 'Minhas Aves' primeiro!")
 else:
+    if st.session_state.get("sucesso_envio_torneio", False):
+        st.success("🎯 Enviada com sucesso! Aguarde a aprovação da administração.")
+        st.session_state["sucesso_envio_torneio"] = False # Reseta a mensagem para a próxima entrada
+        
     with st.form("form_sol_insc", clear_on_submit=True):
         lista_opcoes = [f"{r['Nome da Ave']} ({r['Espécie']}) - Anilha: {r['Anilha']} | Dono: {r['Proprietário']}" for _, r in df_disp.iterrows()]
-        ave_sel = st.selectbox("Selecione a Ave:", lista_opcoes)
-        is_socio_clube = st.selectbox("Sócio da ARO?", ["Sim", "Não"])
         
-        enviado = st.form_submit_button("Enviar Solicitação", use_container_width=True)
-        if enviado:
-            idx_sel = lista_opcoes.index(ave_sel)
-            ave_obj = df_disp.iloc[idx_sel]
-            
-            nova_s = pd.DataFrame([{
-                "Proprietário": ave_obj["Proprietário"], 
-                "Nome da Ave": ave_obj["Nome da Ave"], 
-                "Espécie": ave_obj["Espécie"], 
-                "Anilha": ave_obj["Anilha"], 
-                "Valor": 25.0 if is_socio_clube == "Sim" else 35.0, 
-                "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"
-            }])
-            
-            # Concatenando direto na estrutura global para não perder os dados na recarga
-            st.session_state["inscricoes_pendentes_aro"] = pd.concat([st.session_state["inscricoes_pendentes_aro"], nova_s], ignore_index=True)
-            st.success("🎯 Enviada com sucesso! Aguarde a aprovação da administração.")
-            st.rerun()
+        # Linkamos os componentes a chaves estáveis no session_state via parameter 'key'
+        st.selectbox("Selecione a Ave:", lista_opcoes, key="input_ave_selecionada")
+        st.selectbox("Sócio da ARO?", ["Sim", "Não"], key="input_is_socio_clube")
+        
+        # Chamamos o callback diretamente no clique do submit do formulário
+        st.form_submit_button(
+            "Enviar Solicitação", 
+            use_container_width=True, 
+            on_click=processar_solicitacao_inscricao, 
+            args=(df_disp, lista_opcoes)
+        )
 
 # --- CONFIRMADOS EM ABAS ---
 st.write("---")
