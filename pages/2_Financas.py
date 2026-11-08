@@ -56,7 +56,7 @@ saldo_total = saldo_anterior + saldo_gestao
 # --- 1. MENU PRINCIPAL ---
 st.markdown("### 📊 Resumo Consolidado Geral")
 
-# Saldo Anterior no topo - Agora validando com a role 'master' com total segurança
+# Saldo Anterior no topo - Editável APENAS pelo perfil 'master'
 with st.container():
     if is_master:
         novo_saldo_anterior = st.number_input("Saldo Anterior (R$)", value=float(saldo_anterior), step=100.0, key="edit_saldo_ant")
@@ -98,15 +98,15 @@ total_saidas_mes = pd.to_numeric(df_atual["Saídas"], errors='coerce').fillna(0)
 saldo_mes = total_entradas_mes - total_saidas_mes
 
 col_mes_totais = st.columns(3)
-col_mes_totais[0].metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
-col_mes_totais[1].metric("Saídas do Mês", f"R$ {total_saidas_mes:,.2f}")
-col_mes_totais[2].metric("Balanço do Mês", f"R$ {saldo_mes:,.2f}")
+col_mes_totais.metric("Entradas do Mês", f"R$ {total_entradas_mes:,.2f}")
+col_mes_totais.metric("Saídas do Mês", f"R$ {total_saidas_mes:,.2f}")
+col_mes_totais.metric("Balanço do Mês", f"R$ {saldo_mes:,.2f}")
 
 st.write("")
 st.markdown(f"**Tabela de Movimentações - {mes_selecionado}**")
 
 if is_master:
-    # num_rows="dynamic" permite clicar em "+" no rodapé para adicionar linhas livres e dobrar lançamentos diários
+    # num_rows="dynamic" permite clicar em "+" no rodapé
     df_editado = st.data_editor(
         df_atual,
         hide_index=True,
@@ -121,8 +121,12 @@ if is_master:
         key=f"editor_financeiro_{mes_selecionado}"
     )
     
-    # Se houver mudanças, salva no estado global automaticamente
+    # Se houver mudanças, aplica a ordenação automática pelo Dia antes de salvar
     if not df_editado.equals(df_atual):
+        # CORREÇÃO: Transforma a coluna em número e ordena de forma crescente
+        df_editado["Dia"] = pd.to_numeric(df_editado["Dia"], errors='coerce')
+        df_editado = df_editado.dropna(subset=["Dia"]).sort_values(by="Dia").reset_index(drop=True)
+        
         st.session_state["financas_data"]["meses"][mes_selecionado] = df_editado
         st.rerun()
 else:
