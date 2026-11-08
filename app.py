@@ -60,7 +60,7 @@ try:
     url_socios = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Socios"
     url_financeiro = f"{link_limpo}/gviz/tq?tqx=out:csv&sheet=Financeiro"
 
-    df_socios = pd.read_csv(url_socios)
+    df_socios_web = pd.read_csv(url_socios)
     df_financeiro = pd.read_csv(url_financeiro)
 except Exception as e:
     st.error("Erro ao conectar à planilha. Verifique se o link está público e correto nos Secrets.")
@@ -83,7 +83,6 @@ if st.session_state["tela_atual"] == "menu":
         
     st.markdown("---")
     
-    # Exibe badge discreto de nível de acesso
     if st.session_state["user_role"] == "master":
         st.info("⭐ Modo Administrador: Acesso Master Ativado")
     
@@ -94,30 +93,77 @@ if st.session_state["tela_atual"] == "menu":
     col_btn_socios, col_btn_caixa = st.columns(2)
     
     with col_btn_socios:
-        # Ícone estilizado em Amarelo Gold para combinar com a logo da ARO
         st.markdown("<h1 style='text-align: center; margin: 0; color: #FBBF24;'>👥</h1>", unsafe_allow_html=True)
         if st.button("Sócios", use_container_width=True, type="primary"):
             st.session_state["tela_atual"] = "socios"
             st.rerun()
             
     with col_btn_caixa:
-        # Ícone estilizado em Amarelo Gold para combinar com a logo da ARO
         st.markdown("<h1 style='text-align: center; margin: 0; color: #FBBF24;'>🪙</h1>", unsafe_allow_html=True)
         if st.button("Finanças", use_container_width=True, type="primary"):
             st.session_state["tela_atual"] = "caixa"
             st.rerun()
 
-# --- TELA 2: SÓCIOS ---
+# --- TELA 2: SÓCIOS (REESTRUTURADO CONFORME AS ESPECIFICAÇÕES) ---
 elif st.session_state["tela_atual"] == "socios":
-    if st.button("⬅️ Voltar ao Menu Principal"):
+    if st.button("⬅️ Voltar ao Menu"):
         st.session_state["tela_atual"] = "menu"
         st.rerun()
         
-    st.title("👥 Sócios")
+    st.title("👥 Controle de Sócios (ARO)")
     st.markdown("---")
-    st.dataframe(df_socios, use_container_width=True)
+    
+    # Montagem da estrutura de 1 a 100 linhas fixas
+    linhas_fixas = []
+    for i in range(1, 101):
+        # Tenta buscar os dados existentes vindos da planilha
+        if i - 1 < len(df_socios_web):
+            dados_linha = df_socios_web.iloc[i - 1]
+            linhas_fixas.append({
+                "Número": i,
+                "ID": dados_linha.get("ID", ""),
+                "Nome": dados_linha.get("Nome", ""),
+                "Telefone": dados_linha.get("Telefone", ""),
+                "CPF": dados_linha.get("CPF", ""),
+                "CTF": dados_linha.get("CTF", ""),
+                "Status": dados_linha.get("Status", "Ativo")
+            })
+        else:
+            # Preenche linhas vazias caso a planilha ainda não tenha 100 registros
+            linhas_fixas.append({
+                "Número": i, "ID": "", "Nome": "", "Telefone": "", "CPF": "", "CTF": "", "Status": "Ativo"
+            })
+            
+    df_estrutura_socios = pd.DataFrame(linhas_fixas)
+    
+    # TRAVA DE SEGURANÇA: Se não for o usuário master, a tabela fica bloqueada para alterações
+    if st.session_state["user_role"] == "master":
+        st.success("📝 Você está logado como Master. Edição de colunas liberada abaixo:")
+        
+        # Torna a tabela totalmente editável na tela pelo usuário Master
+        df_editado = st.data_editor(
+            df_estrutura_socios,
+            use_container_width=True,
+            disabled=["Número"], # Primeira coluna 'Número' é protegida e auto-incremental
+            column_config={
+                "Status": st.column_config.SelectboxColumn(
+                    "Status",
+                    options=["Ativo", "Inativo"],
+                    required=True
+                )
+            },
+            hide_index=True
+        )
+        
+        # Botão auxiliar para sincronizar ou gerenciar dados com o Drive
+        with st.expander("📂 Sincronização e Ajustes manuais com a Planilha"):
+            st.markdown(f"Abra a sua planilha do Google Drive para consolidar alterações em massa ou copiar dados:")
+            st.markdown(f"[➡️ Abrir Planilha Google Sheets]({url_base})")
+    else:
+        st.warning("🔒 Visualização restrita. Somente o usuário Master pode editar estas colunas.")
+        st.dataframe(df_estrutura_socios, use_container_width=True, hide_index=True)
 
-# --- TELA 3: FINANÇAS (Métricas e Fluxo de Caixa Centralizados Aqui) ---
+# --- TELA 3: FINANÇAS ---
 elif st.session_state["tela_atual"] == "caixa":
     if st.button("⬅️ Voltar ao Menu Principal"):
         st.session_state["tela_atual"] = "menu"
@@ -126,7 +172,6 @@ elif st.session_state["tela_atual"] == "caixa":
     st.title("🪙 Finanças")
     st.markdown("---")
     
-    # CÁLCULO DE SALDO TRASLADADO APENAS PARA A TELA INTERNA DE FINANÇAS
     entradas, saidas, saldo_atual = 0.0, 0.0, 0.0
     if not df_financeiro.empty:
         df_financeiro.columns = [c.strip().title() for c in df_financeiro.columns]
@@ -136,7 +181,6 @@ elif st.session_state["tela_atual"] == "caixa":
             saidas = df_financeiro[df_financeiro['Tipo'] == 'Saída']['Valor'].sum()
             saldo_atual = entradas - saidas
 
-    # Painel de Indicadores agora em seu devido lugar
     col1, col2, col3 = st.columns(3)
     col1.metric(label="🟢 Total de Entradas", value=f"R$ {entradas:,.2f}")
     col2.metric(label="🔴 Total de Saídas", value=f"R$ {saidas:,.2f}")
@@ -144,3 +188,4 @@ elif st.session_state["tela_atual"] == "caixa":
     st.markdown("---")
     
     st.dataframe(df_financeiro, use_container_width=True)
+
