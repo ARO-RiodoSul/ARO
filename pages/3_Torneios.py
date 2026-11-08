@@ -106,7 +106,7 @@ if is_admin:
 
 st.write("---")
 st.markdown("### 📋 Minhas Inscrições")
-lista_status = []
+lista_status =
 
 if not df_pendentes_atual.empty:
     filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
@@ -227,6 +227,45 @@ if role_atual == "master":
                 salvar_dados_fisicos()
                 st.success("Torneio excluído com sucesso!")
                 st.rerun()
+
+    # --- NOVO CAMPO: INSCRIÇÃO MANUAL PARA NÃO SÓCIOS (DIRETO NAS CONFIRMADAS) ---
+    st.write("---")
+    st.markdown("### ➕ Inscrição Manual Rápida (Não Sócios / Visitantes)")
+    with st.form("form_manual_master", clear_on_submit=True):
+        m_prop = st.text_input("Nome do Proprietário:")
+        m_ave = st.text_input("Nome da Ave:")
+        m_esp = st.selectbox("Espécie:", especies_validas)
+        m_anilha = st.text_input("Número da Anilha:")
+        
+        if st.form_submit_button("⚡ Inscrever Ave Manualmente", use_container_width=True):
+            if m_prop and m_ave and m_anilha:
+                # Sorteio automático de estaca livre idêntico ao fluxo de aprovação
+                ocupadas = []
+                if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
+                    df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == m_esp]
+                    ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
+                
+                lim = 50 if m_esp in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if m_esp in ["Canário", "Azulão"] else 5)
+                livres = [x for x in range(1, lim + 1) if x not in ocupadas]
+                sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
+                
+                # Visitantes manuais entram direto como Não Sócio (Valor: 35.0, Clube: Outro)
+                nova_m = pd.DataFrame([{
+                    "Proprietário": m_prop.strip(),
+                    "Nome da Ave": m_ave.strip(),
+                    "Espécie": m_esp,
+                    "Anilha": m_anilha.strip(),
+                    "Estaca": int(sorteio),
+                    "Valor": 35.0,
+                    "Clube": "Outro"
+                }])
+                
+                st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_m], ignore_index=True)
+                salvar_dados_fisicos()
+                st.success(f"✅ {m_ave} inserido com sucesso na Estaca {sorteio}!")
+                st.rerun()
+            else:
+                st.error("⚠️ Preencha todos os campos para efetuar a inscrição manual.")
 
     if not df_inscritos_atual.empty:
         st.write("---")
