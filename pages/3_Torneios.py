@@ -23,7 +23,7 @@ socio_vinculado = "Administração" if is_admin else usuarios_dinamicos.get(st.s
 
 ARQUIVO_CONFIRMADOS = "inscricoes_confirmadas.pkl"
 ARQUIVO_PENDENTES = "inscricoes_pendentes.pkl"
-ARQUIVO_EVENTO = "status_evento.pkl"
+ARQUIVO_EVENTO = "status_evento.pkl"  # Arquivo que controla se o torneio existe
 
 def carregar_dados_fisicos():
     if os.path.exists(ARQUIVO_CONFIRMADOS):
@@ -78,16 +78,16 @@ if torneio_data is not None:
     st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
 # =========================================================================================
-# 🌐 FLUXO EXCLUSIVO: VISITANTE / CONVIDADO
+# 🌐 CONDICIONAL EXCLUSIVA DE VISITANTES (BLOQUEIA O RESTANTE DA TELA E MOSTRA O FORMULÁRIO PEDIDO)
 # =========================================================================================
 if role_atual == "visitante":
     if torneio_data is None:
         st.info("💡 Quando um torneio for cadastrado pela diretoria, o formulário de inscrições para visitantes aparecerá aqui automaticamente.")
     else:
         st.write("---")
-        st.markdown("### 📝 Inscrição para não sócio")
+        st.markdown("### 📝 inscrição para não socio")
         
-        with st.form("form_visitante_exclusivo", clear_on_submit=True):
+        with st.form("form_visitante_exclusivo_novo", clear_on_submit=True):
             v_proprietario = st.text_input("Proprietario:")
             v_ave = st.text_input("Ave:")
             v_especie = st.selectbox("Espécie:", especies_validas)
@@ -116,12 +116,8 @@ if role_atual == "visitante":
                     st.success("✅ **Inscrição solicitada, aguarde a aprovação de um membro da diretoria ARO**")
                     st.markdown("---")
                     st.balloons()
-                    
-    st.stop()  # Garante o bloqueio completo do restante da página para o visitante
-# =========================================================================================
-# 🔒 FLUXO NORMAL: MASTER, DIRETORIA E SÓCIOS CLUBE (INALTERADO)
-# =========================================================================================
-
+                    st.rerun()
+    st.stop()  # Trava aqui! Visitantes não executam absolutamente nada abaixo daqui
 if is_admin and torneio_data is not None:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
@@ -131,7 +127,7 @@ if is_admin and torneio_data is not None:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
                 c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
-                c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']} | 🏢 Clube: {row.get('Clube', 'Outro')}")
+                c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
                 
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
                     ocupadas = []
@@ -155,73 +151,39 @@ if is_admin and torneio_data is not None:
                     salvar_dados_fisicos()
                     st.warning("Recusada!")
                     st.rerun()
-
 if torneio_data is not None:
-    # --- EXIBIÇÃO DE TODAS AS INSCRIÇÕES SE FOR ADMIN/MASTER (FILTRADO POR ESPÉCIE) ---
-    if is_admin:
-        st.write("---")
-        st.markdown("### 🏆 Inscrições Confirmadas por Espécie")
-        if df_inscritos_atual.empty:
-            st.caption("Nenhum participante inscrito ou confirmado até o momento.")
-        else:
-            # Cria as abas de navegação para cada espécie cadastrada no sistema
-            abas_especies = st.tabs(especies_validas)
-            
-            for i, esp_nome in enumerate(especies_validas):
-                with abas_especies[i]:
-                    # Filtra e ordena estaca por estaca da espécie ativa
-                    df_filtrado_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == esp_nome].copy()
-                    
-                    if df_filtrado_esp.empty:
-                        st.caption(f"Nenhuma ave da espécie {esp_nome} confirmada até agora.")
-                    else:
-                        df_filtrado_esp["Estaca"] = pd.to_numeric(df_filtrado_esp["Estaca"], errors="coerce").fillna(0).astype(int)
-                        df_filtrado_esp = df_filtrado_esp.sort_values(by="Estaca").reset_index(drop=True)
-                        st.dataframe(df_filtrado_esp, hide_index=True, use_container_width=True)
-    
-    # --- VISÃO HISTÓRICA DO SÓCIO COMUM ---
-    else:
-        st.write("---")
-        st.markdown("### 📋 Minhas Inscrições")
-        lista_status = []
-        if not df_pendentes_atual.empty:
-            filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
-            for _, r in filtrado_p.iterrows(): 
-                lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
-        if not df_inscritos_atual.empty:
-            filtrado_i = df_inscritos_atual[df_inscritos_atual["Proprietário"] == socio_vinculado]
-            for _, r in filtrado_i.iterrows(): 
-                lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Inscrito Confirmado"})
-        if len(lista_status) == 0: 
-            st.caption("Você não possui nenhuma ave cadastrada neste torneio.")
-        else: 
-            st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
+    st.write("---")
+    st.markdown("### 📋 Minhas Inscrições")
+    lista_status = []
+    if not df_pendentes_atual.empty:
+        filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
+        for _, r in filtrado_p.iterrows(): 
+            lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
+    if not df_inscritos_atual.empty:
+        filtrado_i = df_inscritos_atual[df_inscritos_atual["Proprietário"] == socio_vinculado]
+        for _, r in filtrado_i.iterrows(): 
+            lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Inscrito Confirmado"})
+    if len(lista_status) == 0: 
+        st.caption("Você não possui nenhuma ave cadastrada neste torneio.")
+    else: 
+        st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
-    # --- FORMULÁRIO DE SOLICITAÇÃO NORMAL (SÓCIOS E ADMINS) ---
     st.write("---")
     st.markdown("### 📝 Solicitar Inscrição de Ave")
     df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
     df_disp = df_plantel if is_admin else (df_plantel[df_plantel["Proprietário"] == socio_vinculado] if not df_plantel.empty else pd.DataFrame())
-    
     if df_disp.empty: 
-        st.warning("⚠️ Nenhuma ave encontrada no plantel para realizar inscrições.")
+        st.warning("⚠️ Nenhuma ave encontrada no seu plantel.")
     else:
         with st.form("form_sol_insc", clear_on_submit=False):
             lista_opcoes = [f"{r['Nome da Ave']} ({r['Espécie']}) - Anilha: {r['Anilha']} | Dono: {r['Proprietário']}" for _, r in df_disp.iterrows()]
             ave_sel = st.selectbox("Selecione a Ave:", lista_opcoes)
             is_socio_clube = st.selectbox("Sócio da ARO?", ["Sim", "Não"])
-            
             if st.form_submit_button("Enviar Solicitação", use_container_width=True):
                 ave_obj = df_disp.iloc[lista_opcoes.index(ave_sel)]
-                nova_s = pd.DataFrame([{
-                    "Proprietário": ave_obj["Proprietário"], 
-                    "Nome da Ave": ave_obj["Nome da Ave"], 
-                    "Espécie": ave_obj["Espécie"], 
-                    "Anilha": ave_obj["Anilha"], 
-                    "Valor": 25.0 if is_socio_clube == "Sim" else 35.0, 
-                    "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"
-                }])
+                nova_s = pd.DataFrame([{"Proprietário": ave_obj["Proprietário"], "Nome da Ave": ave_obj["Nome da Ave"], "Espécie": ave_obj["Espécie"], "Anilha": ave_obj["Anilha"], "Valor": 25.0 if is_socio_clube == "Sim" else 35.0, "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"}])
                 st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
                 salvar_dados_fisicos()
                 st.success("Solicitação enviada com sucesso!")
                 st.rerun()
+
