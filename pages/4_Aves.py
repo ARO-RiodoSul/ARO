@@ -12,6 +12,22 @@ st.title("🦅 Plantel de Aves Compartilhado - ARO")
 role_atual = str(st.session_state.get("user_role", "")).strip().lower()
 usuario_logado = str(st.session_state.get("username", "")).strip().lower()
 
+# --- RESTRICAO EXCLUSIVA PARA VISITANTES ---
+if role_atual == "visitante":
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.error("🔒 **Acesso Restrito**")
+    st.markdown(
+        """
+        <h3 style='color: #DC2626; margin-top: 0;'>Esta página é de acesso exclusivo para Sócios da ARO!</h3>
+        <p style='color: #4B5563; font-size: 16px;'>
+            Como visitante, você pode utilizar o menu lateral à esquerda para navegar até a aba de 
+            <b>Torneios</b>, onde encontrará a sua área e opções exclusivas.
+        </p>
+        """, 
+        unsafe_allow_html=True
+    )
+    st.stop()
+
 PATH_AVES = "backup_aves.pkl"
 usuarios_dinamicos = st.session_state.get("banco_usuarios_dinamicos", {})
 
@@ -107,4 +123,3 @@ if is_master_strict:
                 with open(PATH_AVES, "wb") as f:
                     pickle.dump(df_remanescente, f)
                 st.success("Ave removida e sincronizada no servidor com sucesso!"); st.rerun()
-
