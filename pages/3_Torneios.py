@@ -157,36 +157,61 @@ if is_admin and torneio_data is not None:
                     st.rerun()
 
 if torneio_data is not None:
-    st.write("---")
-    st.markdown("### 📋 Minhas Inscrições")
-    lista_status = []
-    if not df_pendentes_atual.empty:
-        filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
-        for _, r in filtrado_p.iterrows(): 
-            lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
-    if not df_inscritos_atual.empty:
-        filtrado_i = df_inscritos_atual[df_inscritos_atual["Proprietário"] == socio_vinculado]
-        for _, r in filtrado_i.iterrows(): 
-            lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Inscrito Confirmado"})
-    if len(lista_status) == 0: 
-        st.caption("Você não possui nenhuma ave cadastrada neste torneio.")
-    else: 
-        st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
+    # --- EXIBIÇÃO DE TODAS AS INSCRIÇÕES SE FOR ADMIN/MASTER ---
+    if is_admin:
+        st.write("---")
+        st.markdown("### 🏆 Todas as Inscrições Confirmadas no Torneio")
+        if df_inscritos_atual.empty:
+            st.caption("Nenhum participante inscrito ou confirmado até o momento.")
+        else:
+            # Organiza os dados para exibição clara na planilha
+            df_exibicao_master = df_inscritos_atual.copy()
+            df_exibicao_master["Estaca"] = pd.to_numeric(df_exibicao_master["Estaca"], errors="coerce").fillna(0).astype(int)
+            df_exibicao_master = df_exibicao_master.sort_values(by=["Espécie", "Estaca"]).reset_index(drop=True)
+            st.dataframe(df_exibicao_master, hide_index=True, use_container_width=True)
+    
+    # --- VISÃO HISTÓRICA DO SÓCIO COMUM ---
+    else:
+        st.write("---")
+        st.markdown("### 📋 Minhas Inscrições")
+        lista_status = []
+        if not df_pendentes_atual.empty:
+            filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
+            for _, r in filtrado_p.iterrows(): 
+                lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
+        if not df_inscritos_atual.empty:
+            filtrado_i = df_inscritos_atual[df_inscritos_atual["Proprietário"] == socio_vinculado]
+            for _, r in filtrado_i.iterrows(): 
+                lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Inscrito Confirmado"})
+        if len(lista_status) == 0: 
+            st.caption("Você não possui nenhuma ave cadastrada neste torneio.")
+        else: 
+            st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
+    # --- FORMULÁRIO DE SOLICITAÇÃO NORMAL (SÓCIOS E ADMINS) ---
     st.write("---")
     st.markdown("### 📝 Solicitar Inscrição de Ave")
     df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
     df_disp = df_plantel if is_admin else (df_plantel[df_plantel["Proprietário"] == socio_vinculado] if not df_plantel.empty else pd.DataFrame())
+    
     if df_disp.empty: 
-        st.warning("⚠️ Nenhuma ave encontrada no seu plantel.")
+        st.warning("⚠️ Nenhuma ave encontrada no plantel para realizar inscrições.")
     else:
         with st.form("form_sol_insc", clear_on_submit=False):
             lista_opcoes = [f"{r['Nome da Ave']} ({r['Espécie']}) - Anilha: {r['Anilha']} | Dono: {r['Proprietário']}" for _, r in df_disp.iterrows()]
             ave_sel = st.selectbox("Selecione a Ave:", lista_opcoes)
             is_socio_clube = st.selectbox("Sócio da ARO?", ["Sim", "Não"])
+            
             if st.form_submit_button("Enviar Solicitação", use_container_width=True):
                 ave_obj = df_disp.iloc[lista_opcoes.index(ave_sel)]
-                nova_s = pd.DataFrame([{"Proprietário": ave_obj["Proprietário"], "Nome da Ave": ave_obj["Nome da Ave"], "Espécie": ave_obj["Espécie"], "Anilha": ave_obj["Anilha"], "Valor": 25.0 if is_socio_clube == "Sim" else 35.0, "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"}])
+                nova_s = pd.DataFrame([{
+                    "Proprietário": ave_obj["Proprietário"], 
+                    "Nome da Ave": ave_obj["Nome da Ave"], 
+                    "Espécie": ave_obj["Espécie"], 
+                    "Anilha": ave_obj["Anilha"], 
+                    "Valor": 25.0 if is_socio_clube == "Sim" else 35.0, 
+                    "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"
+                }])
                 st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
                 salvar_dados_fisicos()
                 st.success("Solicitação enviada com sucesso!")
