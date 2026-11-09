@@ -77,6 +77,43 @@ if torneio_data is not None:
         cols[i].metric(label=esp, value=str(contagem[esp]))
     st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
+# =========================================================================================
+# 🌐 BLOQUEIO CIRÚRGICO EXCLUSIVO PARA VISITANTES / CONVIDADOS
+# =========================================================================================
+if role_atual == "visitante":
+    if torneio_data is not None:
+        st.write("---")
+        st.markdown("### 📝 inscrição para não socio")
+        
+        with st.form("form_visitante_exclusivo", clear_on_submit=True):
+            v_proprietario = st.text_input("Proprietario:")
+            v_ave = st.text_input("Ave:")
+            v_especie = st.selectbox("Espécie:", especies_validas)
+            v_anilha = st.text_input("Anilha:")
+            v_clube = st.text_input("Clube:")
+            
+            if st.form_submit_button("Solicitar Inscrição", use_container_width=True):
+                if v_proprietario.strip() and v_ave.strip() and v_anilha.strip() and v_clube.strip():
+                    nova_v = pd.DataFrame([{
+                        "Proprietário": v_proprietario.strip(),
+                        "Nome da Ave": v_ave.strip(),
+                        "Espécie": v_especie,
+                        "Anilha": v_anilha.strip(),
+                        "Valor": 35.0,
+                        "Clube": v_clube.strip()
+                    }])
+                    st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_v], ignore_index=True)
+                    salvar_dados_fisicos()
+                    st.success("✅ inscrição solicitada, aguarde a aprovação de um membro da diretoria ARO")
+                    st.rerun()
+                else:
+                    st.error("❌ Por favor, preencha todos os campos do formulário.")
+    st.stop()  # Trava o script aqui! Visitantes não carregam nada do fluxo de baixo
+
+# =========================================================================================
+# 🔒 FLUXO NORMAL: MASTER, DIRETORIA E SÓCIOS CLUBE (INALTERADO)
+# =========================================================================================
+
 if is_admin and torneio_data is not None:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
@@ -110,6 +147,7 @@ if is_admin and torneio_data is not None:
                     salvar_dados_fisicos()
                     st.warning("Recusada!")
                     st.rerun()
+
 if torneio_data is not None:
     st.write("---")
     st.markdown("### 📋 Minhas Inscrições")
@@ -142,4 +180,6 @@ if torneio_data is not None:
                 ave_obj = df_disp.iloc[lista_opcoes.index(ave_sel)]
                 nova_s = pd.DataFrame([{"Proprietário": ave_obj["Proprietário"], "Nome da Ave": ave_obj["Nome da Ave"], "Espécie": ave_obj["Espécie"], "Anilha": ave_obj["Anilha"], "Valor": 25.0 if is_socio_clube == "Sim" else 35.0, "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"}])
                 st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
-                sa
+                salvar_dados_fisicos()
+                st.success("Solicitação enviada com sucesso!")
+                st.rerun()
