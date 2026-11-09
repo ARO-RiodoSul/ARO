@@ -64,6 +64,44 @@ if torneio_data is not None:
     for i, esp in enumerate(especies_validas): cols[i].metric(label=esp, value=str(contagem[esp]))
     st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
+# =========================================================================================
+# 🌐 FLUXO EXCLUSIVO: VISITANTE / CONVIDADO
+# =========================================================================================
+if role_atual == "visitante":
+    if torneio_data is not None:
+        st.write("---")
+        st.markdown("### 📝 inscrição para não socio")
+        
+        with st.form("form_visitante_exclusivo", clear_on_submit=True):
+            v_proprietario = st.text_input("Proprietario:")
+            v_ave = st.text_input("Ave:")
+            v_especie = st.selectbox("Espécie:", especies_validas)
+            v_anilha = st.text_input("Anilha:")
+            v_clube = st.text_input("Clube:")
+            
+            st.markdown("**Valor da Inscrição:** `R$ 35,00`")
+            
+            if st.form_submit_button("Solicitar Inscrição", use_container_width=True):
+                if not v_proprietario.strip() or not v_ave.strip() or not v_anilha.strip() or not v_clube.strip():
+                    st.error("❌ Por favor, preencha todos os campos do formulário.")
+                else:
+                    nova_v = pd.DataFrame([{
+                        "Proprietário": v_proprietario.strip(),
+                        "Nome da Ave": v_ave.strip(),
+                        "Espécie": v_especie,
+                        "Anilha": v_anilha.strip(),
+                        "Valor": 35.0,
+                        "Clube": v_clube.strip()
+                    }])
+                    st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_v], ignore_index=True)
+                    salvar_dados_fisicos()
+                    st.success("✅ inscrição solicitada, aguarde a aprovação de um membro da diretoria ARO")
+                    st.rerun()
+    st.stop()  # Trava o visitante aqui! Nenhuma linha abaixo será executada por ele.
+
+# =========================================================================================
+# 🔒 FLUXO NORMAL: MASTER, DIRETORIA E SÓCIOS CLUBE (CÓDIGO ORIGINAL CONTINUA ABAIXO)
+# =========================================================================================
 if is_admin and torneio_data is not None:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
@@ -74,7 +112,7 @@ if is_admin and torneio_data is not None:
             with st.container():
                 c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
                 c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
-                if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
+                if c_b1.button("✅ Approvar", key=f"ap_{idx}", use_container_width=True):
                     ocupadas = []
                     if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
                         df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == row["Espécie"]]
@@ -97,18 +135,23 @@ if torneio_data is not None:
     lista_status = []
     if not df_pendentes_atual.empty:
         filtrado_p = df_pendentes_atual[df_pendentes_atual["Proprietário"] == socio_vinculado]
-        for _, r in filtrado_p.iterrows(): lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
+        for _, r in filtrado_p.iterrows(): 
+            lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": "⏳ Aguardando...", "Status": "Fila de Aprovação"})
     if not df_inscritos_atual.empty:
         filtrado_i = df_inscritos_atual[df_inscritos_atual["Proprietário"] == socio_vinculado]
-        for _, r in filtrado_i.iterrows(): lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Inscrito Confirmado"})
-    if len(lista_status) == 0: st.caption("Você não possui nenhuma ave cadastrada neste torneio.")
-    else: st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
+        for _, r in filtrado_i.iterrows(): 
+            lista_status.append({"Ave": r["Nome da Ave"], "Espécie": r["Espécie"], "Anilha": r["Anilha"], "Estaca": str(int(r["Estaca"])), "Status": "✅ Inscrito Confirmado"})
+    if len(lista_status) == 0: 
+        st.caption("Você não possui nenhuma ave cadastrada neste torneio.")
+    else: 
+        st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
     st.write("---")
     st.markdown("### 📝 Solicitar Inscrição de Ave")
     df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
     df_disp = df_plantel if is_admin else (df_plantel[df_plantel["Proprietário"] == socio_vinculado] if not df_plantel.empty else pd.DataFrame())
-    if df_disp.empty: st.warning("⚠️ Nenhuma ave cadastrada no seu plantel.")
+    if df_disp.empty: 
+        st.warning("⚠️ Nenhuma ave cadastrada no seu plantel.")
     else:
         with st.form("form_sol_insc", clear_on_submit=False):
             lista_opcoes = [f"{r['Nome da Ave']} ({r['Espécie']}) - Anilha: {r['Anilha']} | Dono: {r['Proprietário']}" for _, r in df_disp.iterrows()]
@@ -126,96 +169,111 @@ if torneio_data is not None:
     abas = st.tabs(especies_validas)
     for i, esp in enumerate(especies_validas):
         with abas[i]:
-            df_f = df_inscritos_atual[df_inscritos_atual["Espécie"] == esp] if not df_inscritos_atual.empty else pd.DataFrame()
-            if df_f.empty: st.caption("Sem competidores confirmados.")
-            else: st.dataframe(df_f.sort_values(by="Estaca"), hide_index=True, column_config={"Estaca": st.column_config.NumberColumn("Estaca", format="%d"), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}, use_container_width=True)
+            df_f = df_inscritos_atual[df_inscritos_atual["Espécie"] == esp].copy() if not df_inscritos_atual.empty else pd.DataFrame()
+            if df_f.empty:
+                st.caption(f"Nenhum competidor confirmado para {esp} até o momento.")
+            else:
+                df_f["Estaca"] = pd.to_numeric(df_f["Estaca"], errors="coerce").fillna(0).astype(int)
+                df_f = df_f.sort_values(by="Estaca").reset_index(drop=True)
+                st.dataframe(df_f[["Estaca", "Proprietário", "Nome da Ave", "Anilha", "Clube", "Valor"]], hide_index=True, use_container_width=True)
 
-def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
-    buf = io.BytesIO()
-    canvas_obj = canvas.Canvas(buf, pagesize=A4)
-    data_str = data_torneio.strftime('%d/%m/%Y') if data_torneio else ""
-    m_x, m_y, f_w, f_h = 0.5 * cm, 0.8 * cm, 10.0 * cm, 7.0 * cm
-    for idx, r in df_inscritos.reset_index(drop=True).iterrows():
-        pos = idx % 8
-        if pos == 0 and idx > 0: canvas_obj.showPage()
-        col, lin = pos % 2, 3 - (pos // 2)
-        x, y = m_x + (col * f_w), m_y + (lin * f_h)
-        clube_ficha = "ARO" if str(r.get("Clube", "")).upper() == "ARO" else "Outro"
-        v_str = "R$ 25,00" if clube_ficha == "ARO" else "R$ 35,00"
-        est_str = str(int(r['Estaca'])) if 'Estaca' in r and not pd.isna(r['Estaca']) else 'N/A'
-        canvas_obj.setStrokeColor(colors.black)
-        canvas_obj.rect(x, y, f_w, f_h, stroke=1, fill=0)
-        canvas_obj.line(x, y + 5.3*cm, x + f_w, y + 5.3*cm)
-        canvas_obj.setFont("Helvetica-Bold", 14)
-        canvas_obj.drawCentredString(x + 5.0*cm, y + 5.8*cm, "ARO - RIO DO SUL")
-        canvas_obj.setFont("Helvetica-Bold", 11)
-        canvas_obj.drawString(x + 0.4*cm, y + 4.5*cm, f"DATA: {data_str}")
-        canvas_obj.setFont("Helvetica-Bold", 13)
-        canvas_obj.drawString(x + 5.8*cm, y + 4.5*cm, f"ESTACA: {est_str}")
-        canvas_obj.setFont("Helvetica-Bold", 10)
-        canvas_obj.drawString(x + 0.4*cm, y + 3.5*cm, f"PROPRIETÁRIO: {str(r['Proprietário']).upper()[:32]}")
-        canvas_obj.drawString(x + 0.4*cm, y + 2.6*cm, f"AVE: {str(r['Nome da Ave']).upper()[:22]}")
-        canvas_obj.drawString(x + 0.4*cm, y + 1.8*cm, f"ESPÉCIE: {str(r['Espécie']).upper()}")
-        canvas_obj.drawString(x + 0.4*cm, y + 1.0*cm, f"CLUBE: {clube_ficha}")
-        canvas_obj.drawString(x + 0.4*cm, y + 0.3*cm, f"ANILHA: {str(r['Anilha']).upper()}")
-        canvas_obj.setFont("Helvetica-Bold", 12)
-        canvas_obj.drawString(x + 5.8*cm, y + 0.3*cm, f"VALOR: {v_str}")
-    canvas_obj.save(); buf.seek(0)
-    return buf
-
-if role_atual == "master":
+# =========================================================================================
+# ⚙️ EXCLUSIVO ADMINISTRATIVO: GERAÇÃO DE PDF E REINICIAR TORNEIO
+# =========================================================================================
+if is_admin and torneio_data is not None:
     st.write("---")
-    st.markdown("### ⚙️ Painel de Controle de Eventos (Master)")
-    if torneio_data is None:
-        st.markdown("#### 🟢 Abrir Nova Temporada / Torneio")
-        data_nova_criar = st.date_input("Escolha a data do novo Torneio:", value=datetime.date(2026, 11, 15), format="DD/MM/YYYY")
-        if st.button("🚀 ABRIR E LIBERAR INSCRIÇÕES", use_container_width=True, type="primary"):
-            st.session_state["torneio_ativo_data"] = data_nova_criar
+    st.markdown("### 🖨️ Central de Impressão de Etiquetas (10x7cm)")
+    
+    if st.button("📄 Gerar Caderno de Etiquetas PDF (Preto e Branco)", use_container_width=True):
+        if df_inscritos_atual.empty:
+            st.error("Não há inscrições confirmadas para gerar etiquetas.")
+        else:
+            buffer = io.BytesIO()
+            p = canvas.Canvas(buffer, pagesize=A4)
+            largura_folha, altura_folha = A4
+            
+            # Dimensões solicitadas: 10cm x 7cm
+            w_box = 10 * cm
+            h_box = 7 * cm
+            
+            # Margens e espaçamentos otimizados para papel adesivo
+            margin_x = 0.5 * cm
+            margin_y = 0.5 * cm
+            gap_x = 0.2 * cm
+            gap_y = 0.2 * cm
+            
+            x_atual = margin_x
+            y_atual = altura_folha - margin_y - h_box
+            
+            # Ordena por espécie e estaca antes de imprimir
+            df_etiquetas = df_inscritos_atual.copy()
+            df_etiquetas["Estaca"] = pd.to_numeric(df_etiquetas["Estaca"], errors="coerce").fillna(0).astype(int)
+            df_etiquetas = df_etiquetas.sort_values(by=["Espécie", "Estaca"])
+            
+            for _, r in df_etiquetas.iterrows():
+                if y_atual < margin_y:
+                    p.showPage()
+                    x_atual = margin_x
+                    y_atual = altura_folha - margin_y - h_box
+                
+                # Desenho do contorno da etiqueta (Preto e Branco)
+                p.setStrokeColor(colors.black)
+                p.setLineWidth(1)
+                p.rect(x_atual, y_atual, w_box, h_box)
+                
+                # Cabeçalho da Associação
+                p.setFont("Helvetica-Bold", 11)
+                p.drawString(x_atual + 0.4*cm, y_atual + 6.0*cm, "ARO - ASSOCIAÇÃO RIO DO SUL DE ORNITOLOGIA")
+                p.setLineWidth(0.5)
+                p.line(x_atual + 0.4*cm, y_atual + 5.7*cm, x_atual + w_box - 0.4*cm, y_atual + 5.7*cm)
+                
+                # Dados da Ave e Proprietário
+                p.setFont("Helvetica-Bold", 10)
+                p.drawString(x_atual + 0.4*cm, y_atual + 4.9*cm, f"PROPRIETÁRIO: {str(r['Proprietário']).upper()}")
+                p.drawString(x_atual + 0.4*cm, y_atual + 4.1*cm, f"AVE: {str(r['Nome da Ave']).upper()}")
+                
+                p.setFont("Helvetica", 9)
+                p.drawString(x_atual + 0.4*cm, y_atual + 3.3*cm, f"ESPÉCIE: {str(r['Espécie']).upper()}")
+                p.drawString(x_atual + 0.4*cm, y_atual + 2.5*cm, f"ANILHA: {str(r['Anilha']).upper()}")
+                p.drawString(x_atual + 0.4*cm, y_atual + 1.7*cm, f"CLUBE: {str(r.get('Clube', 'ARO')).upper()}")
+                
+                # Destaque para a Estaca e Valor cobrado
+                p.setLineWidth(1)
+                p.rect(x_atual + w_box - 3.2*cm, y_atual + 0.4*cm, 2.8*cm, 2.0*cm)
+                
+                p.setFont("Helvetica-Bold", 8)
+                p.drawString(x_atual + w_box - 3.1*cm, y_atual + 2.1*cm, "ESTACA")
+                p.setFont("Helvetica-Bold", 18)
+                p.drawRightString(x_atual + w_box - 0.6*cm, y_atual + 0.8*cm, str(int(r['Estaca'])))
+                
+                p.setFont("Helvetica-Bold", 8)
+                p.drawString(x_atual + 0.4*cm, y_atual + 0.5*cm, f"VALOR: R$ {r['Valor']:.2f}")
+                
+                # Próxima posição da grade
+                x_atual += w_box + gap_x
+                if x_atual + w_box > largura_folha - margin_x:
+                    x_atual = margin_x
+                    y_atual -= (h_box + gap_y)
+            
+            p.save()
+            buffer.seek(0)
+            st.download_button(
+                label="📥 Baixar Fichas e Etiquetas em PDF",
+                data=buffer,
+                file_name=f"etiquetas_torneio_{torneio_data.strftime('%d_%m_%Y')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary"
+            )
+
+    st.write("---")
+    st.markdown("### ⚠️ Administração Geral do Torneio")
+    exp_reset = st.expander("Clique para expandir as opções de reinicialização")
+    with exp_reset:
+        st.warning("🚨 ATENÇÃO: O botão abaixo apagará definitivamente todas as aves inscritas e redefinirá os arquivos físicos.")
+        if st.button("🗑️ Reiniciar e Limpar Dados do Torneio Atual", use_container_width=True, type="primary"):
             st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
             st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
-            salvar_dados_fisicos(); st.success("Torneio liberado!"); st.rerun()
-    else:
-        cbt1, cbt2 = st.columns(2)
-        with cbt1:
-            st.markdown("**🖨️ Impressão de Fichas**")
-            if not df_inscritos_atual.empty:
-                pdf_p = gerar_pdf_fichas_canvas(df_inscritos_atual, torneio_data)
-                st.download_button(label="📥 Imprimir Todas as Fichas (A4)", data=pdf_p, file_name="fichas_completas_aro.pdf", mime="application/pdf", use_container_width=True)
-            else: st.caption("Nenhuma ave confirmada.")
-        with cbt2:
-            st.markdown("**🚨 Encerrar Evento Atual**")
-            if st.checkbox("Habilitar botão de fechamento definitivo"):
-                if st.button("💥 EXCLUIR E FECHAR TORNEIO", use_container_width=True, type="primary"):
-                    st.session_state["torneio_ativo_data"] = None
-                    st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
-                    st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
-                    salvar_dados_fisicos(); st.success("Torneio encerrado!"); st.rerun()
-
-        st.write("---")
-        st.markdown("### ➕ Inscrição Manual Rápida")
-        with st.form("form_manual_master", clear_on_submit=True):
-            m_prop, m_ave = st.text_input("Nome do Proprietário:"), st.text_input("Nome da Ave:")
-            m_esp, m_anilha = st.selectbox("Espécie:", especies_validas), st.text_input("Número da Anilha:")
-            m_socio = st.selectbox("Sócio da ARO?", ["Sim", "Não"], index=1)
-            if st.form_submit_button("⚡ Inscrever Ave Manualmente", use_container_width=True):
-                if m_prop and m_ave and m_anilha:
-                    ocupadas = []
-                    if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
-                        df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == m_esp]
-                        ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
-                    lim = 50 if m_esp in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if m_esp in ["Canário", "Azulão"] else 5)
-                    livres = [x for x in range(1, lim + 1) if x not in ocupadas]
-                    sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
-                    nova_m = pd.DataFrame([{"Proprietário": m_prop.strip(), "Nome da Ave": m_ave.strip(), "Espécie": m_esp, "Anilha": m_anilha.strip(), "Estaca": int(sorteio), "Valor": 25.0 if m_socio == "Sim" else 35.0, "Clube": "ARO" if m_socio == "Sim" else "Outro"}])
-                    st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_m], ignore_index=True)
-                    salvar_dados_fisicos(); st.success(f"✅ Ave inserida na Estaca {sorteio}!"); st.rerun()
-
-        if not df_inscritos_atual.empty:
-            st.write("---")
-            st.markdown("### 🗑️ Cancelamento Manual Individual")
-            opc_lista = [f"[{r['Espécie']}] Estaca {r['Estaca']} - {r['Nome da Ave']} ({r['Proprietário']})" for _, r in df_inscritos_atual.iterrows()]
-            ave_remover = st.selectbox("Escolha uma ave para deletar:", opc_lista)
-            if st.checkbox("Confirmo a exclusão desta ave isolada"):
-                if st.button("❌ Excluir Ave Selecionada", use_container_width=True):
-                    st.session_state["dados_torneios_internos"] = df_inscritos_atual.drop(df_inscritos_atual.index[opc_lista.index(ave_remover)]).reset_index(drop=True)
-                    salvar_dados_fisicos(); st.success("Ave removida!"); st.rerun()
+            st.session_state["torneio_ativo_data"] = None
+            salvar_dados_fisicos()
+            st.success("Torneio reinicializado com sucesso!"); st.rerun()
