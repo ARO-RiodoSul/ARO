@@ -157,18 +157,27 @@ if is_admin and torneio_data is not None:
                     st.rerun()
 
 if torneio_data is not None:
-    # --- EXIBIÇÃO DE TODAS AS INSCRIÇÕES SE FOR ADMIN/MASTER ---
+    # --- EXIBIÇÃO DE TODAS AS INSCRIÇÕES SE FOR ADMIN/MASTER (FILTRADO POR ESPÉCIE) ---
     if is_admin:
         st.write("---")
-        st.markdown("### 🏆 Todas as Inscrições Confirmadas no Torneio")
+        st.markdown("### 🏆 Inscrições Confirmadas por Espécie")
         if df_inscritos_atual.empty:
             st.caption("Nenhum participante inscrito ou confirmado até o momento.")
         else:
-            # Organiza os dados para exibição clara na planilha
-            df_exibicao_master = df_inscritos_atual.copy()
-            df_exibicao_master["Estaca"] = pd.to_numeric(df_exibicao_master["Estaca"], errors="coerce").fillna(0).astype(int)
-            df_exibicao_master = df_exibicao_master.sort_values(by=["Espécie", "Estaca"]).reset_index(drop=True)
-            st.dataframe(df_exibicao_master, hide_index=True, use_container_width=True)
+            # Cria as abas de navegação para cada espécie cadastrada no sistema
+            abas_especies = st.tabs(especies_validas)
+            
+            for i, esp_nome in enumerate(especies_validas):
+                with abas_especies[i]:
+                    # Filtra e ordena estaca por estaca da espécie ativa
+                    df_filtrado_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == esp_nome].copy()
+                    
+                    if df_filtrado_esp.empty:
+                        st.caption(f"Nenhuma ave da espécie {esp_nome} confirmada até agora.")
+                    else:
+                        df_filtrado_esp["Estaca"] = pd.to_numeric(df_filtrado_esp["Estaca"], errors="coerce").fillna(0).astype(int)
+                        df_filtrado_esp = df_filtrado_esp.sort_values(by="Estaca").reset_index(drop=True)
+                        st.dataframe(df_filtrado_esp, hide_index=True, use_container_width=True)
     
     # --- VISÃO HISTÓRICA DO SÓCIO COMUM ---
     else:
