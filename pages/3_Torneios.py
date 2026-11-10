@@ -58,19 +58,26 @@ df_inscritos_atual = st.session_state["dados_torneios_internos"]
 df_pendentes_atual = st.session_state["inscricoes_pendentes_aro"]
 # =========================================================================================
 # =========================================================================================
-# =========================================================================================
-# 🌐 ÁREA DO VISITANTE: SOLICITAR INSCRIÇÃO + CONSULTA DE CONFIRMADOS POR ESPÉCIE E ESTACA
+# 🌐 ÁREA DO VISITANTE: ESTATÍSTICAS ESPELHADAS + FORMULÁRIO + CONSULTA DE COMPETIDORES
 # =========================================================================================
 if role_atual == "visitante":
     if torneio_data is None:
-        st.info("💡 Quando um torneio for cadastrado pela diretoria, o formulário de inscrições para visitantes aparecerá aqui automaticamente.")
+        st.warning("⚠️ Nenhum torneio cadastrado no momento.")
     else:
+        # --- BLOCO IDENTICO AO SEU MASTER DE ESTATÍSTICAS ---
+        st.markdown("### 📊 Estatísticas (Confirmadas)")
+        contagem = {esp: len(df_inscritos_atual[df_inscritos_atual["Espécie"] == esp]) if not df_inscritos_atual.empty else 0 for esp in especies_validas}
+        cols = st.columns(6)
+        for i, esp in enumerate(especies_validas): 
+            cols[i].metric(label=esp, value=str(contagem[esp]))
+        st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
+
         if "sucesso_inscricao_visitante" not in st.session_state:
             st.session_state["sucesso_inscricao_visitante"] = False
 
         st.write("---")
         
-        # 1. TELA DE SUCESSO GRANDE (SE ELE ACABOU DE ENVIAR)
+        # 1. TELA DE SUCESSO EM DESTAQUE (SE ACABOU DE ENVIAR)
         if st.session_state["sucesso_inscricao_visitante"]:
             st.markdown("<br>", unsafe_allow_html=True)
             st.success("### 🎉 INSCRIÇÃO SOLICITADA COM SUCESSO!")
@@ -93,7 +100,7 @@ if role_atual == "visitante":
                 st.rerun()
                 
         else:
-            # 2. FORMULÁRIO DE INSCRIÇÃO DISPONÍVEL
+            # 2. FORMULÁRIO DE INSCRIÇÃO PARA NÃO-SÓCIO
             st.markdown("### 📝 inscrição para não socio")
             with st.form("form_solicitacao_visitante_visual", clear_on_submit=True):
                 v_proprietario = st.text_input("Proprietario:")
@@ -121,7 +128,7 @@ if role_atual == "visitante":
                         st.session_state["sucesso_inscricao_visitante"] = True
                         st.rerun()
 
-        # 3. TABELA DE CONSULTA DE ESTACAS PARA O VISITANTE (REPLICANDO O SEU PADRÃO)
+        # 3. TABELA DE CONSULTA DE ESTACAS PARA O VISITANTE
         st.write("---")
         st.markdown("### 🏆 Competidores Confirmados por Categoria")
         abas_v = st.tabs(especies_validas)
@@ -135,8 +142,7 @@ if role_atual == "visitante":
                     df_f = df_f.sort_values(by="Estaca").reset_index(drop=True)
                     st.dataframe(df_f[["Estaca", "Proprietário", "Nome da Ave", "Anilha", "Clube"]], hide_index=True, use_container_width=True)
                     
-    st.stop()  # 🛑 TRAVA DO VISITANTE: Impede o carregamento dos painéis de gerência do Master abaixo
-
+    st.stop()  # 🛑 TRAVA DO VISITANTE: Protege os painéis administrativos do Master/Diretoria abaixo
 
 
 if torneio_data is not None:
