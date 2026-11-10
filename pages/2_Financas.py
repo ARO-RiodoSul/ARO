@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 import datetime, io, pickle, os
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import cm
+from reportlab.lib import colors
 
 st.set_page_config(page_title="Finanças - Painel ARO", page_icon="💰", layout="wide")
 
@@ -118,7 +122,6 @@ if is_master:
         st.rerun()
 else:
     st.dataframe(df_atual, hide_index=True, column_config={"Dia": "Dia", "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="%.2f"), "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="%.2f"), "Motivo": "Motivo/Descrição"}, use_container_width=True)
-
 st.write("---")
 st.markdown("### 💾 Central de Backups do Caixa")
 col_fback_1, col_fback_2 = st.columns(2)
@@ -144,24 +147,117 @@ with col_fback_2:
             except:
                 st.error("Arquivo inválido.")
 
+# =========================================================================================
+# 🖨️ NOVO: GERADOR DE RELATÓRIO PDF EXCLUSIVO POR MÊS SELECIONADO (EXCLUSIVO MASTER)
+# =========================================================================================
 if is_master:
     st.write("---")
     st.markdown("### 🖨️ Relatórios do Sistema")
-    if st.button("Gerar Relatório de Impressão Completo", use_container_width=True):
-        st.success("Relatório gerado! Pressione Ctrl+P para salvar em PDF.")
-        st.write("---")
-        st.markdown("<h2 style='text-align: center;'>🦅 RELATÓRIO FINANCEIRO INTEGRADO - ARO RIO DO SUL</h2>", unsafe_allow_html=True)
-        st.write(f"**Saldo Anterior Geral:** R$ {saldo_anterior:,.2f} | **Total Entradas:** R$ {total_entradas_geral:,.2f} | **Total Saídas:** R$ {total_saidas_geral:,.2f} | **Saldo Total:** R$ {saldo_total:,.2f}")
-        st.write("---")
-        for m in lista_meses:
-            df_m = df_global_financas[m]
-            if df_m is not None and not df_m.empty:
-                df_filtro = df_m[(df_m["Entradas"] > 0) | (df_m["Saídas"] > 0) | (df_m["Motivo"].str.strip() != "")]
-                if not df_filtro.empty:
-                    st.markdown(f"### 📅 Período: {m}")
-                    df_impressao = df_filtro.copy()
-                    df_impressao["Dia"] = df_impressao["Dia"].astype(int)
-                    df_impressao["Entradas (R$)"] = df_impressao["Entradas"].map(lambda x: f"R$ {float(x):,.2f}")
-                    df_impressao["Saídas (R$)"] = df_impressao["Saídas"].map(lambda x: f"R$ {float(x):,.2f}")
-                    st.table(df_impressao[["Dia", "Entradas (R$)", "Saídas (R$)", "Motivo"]].rename(columns={"Motivo": "Descrição"}))
-
+    st.caption(f"O relatório abaixo será gerado exclusivamente para o período selecionado: **{mes_selecionado}**.")
+    
+    if st.button(f"📄 Salvar Relatório de {mes_selecionado} em PDF", use_container_width=True):
+        # Filtra apenas linhas que possuem alguma movimentação real preenchida
+        df_m = df_global_financas[mes_selecionado]
+        df_filtro = pd.DataFrame()
+        if df_m is not None and not df_m.empty:
+            df_filtro = df_m[(df_m["Entradas"] > 0) | (df_m["Saídas"] > 0) | (df_m["Motivo"].str.strip() != "")]
+            
+        if df_filtro.empty:
+            st.warning(f"⚠️ Não existem movimentações ou lançamentos registrados no mês de {mes_selecionado} para gerar o PDF.")
+        else:
+            # Inicializa o canvas do ReportLab voltado para A4
+            pdf_buffer = io.BytesIO()
+            p = canvas.Canvas(pdf_buffer, pagesize=A4)
+            largura_f, altura_f = A4
+            
+            # Configuração de margens básicas de segurança
+            margem_x = 1.5 * cm
+            y_pos = altura_f - 2.0 * cm
+            
+            # --- CABEÇALHO DO DOCUMENTO (PRETO E BRANCO) ---
+            p.setFont("Helvetica-Bold", 14)
+            p.drawString(margem_x, y_pos, "ARO - ASSOCIAÇÃO RIO DO SUL DE ORNITOLOGIA")
+            y_pos -= 0.6 * cm
+            
+            p.setFont("Helvetica", 11)
+            p.drawString(margem_x, y_pos, f"RELATÓRIO FINANCEIRO MENSAL - PERÍODO: {str(mes_selecionado).upper()}")
+            y_pos -= 0.4 * cm
+            
+            p.setLineWidth(1)
+            p.line(margem_x, y_pos, largura_f - margem_x, y_pos)
+            y_pos -= 0.8 * cm
+            
+            # --- RESUMO FINANCEIRO DO MÊS ---
+            p.setFont("Helvetica-Bold", 10)
+            p.drawString(margem_x, y_pos, f"Entradas do Mês: R$ {total_entradas_mes:,.2f}")
+            p.drawString(margem_x + 6.0*cm, y_pos, f"Saídas do Mês: R$ {total_saidas_mes:,.2f}")
+            p.drawString(margem_x + 12.0*cm, y_pos, f"Balanço Período: R$ {saldo_mes:,.2f}")
+            y_pos -= 0.4 * cm
+            
+            p.setFont("Helvetica", 9)
+            p.drawString(margem_x, y_pos, f"Saldo Anterior Geral: R$ {saldo_anterior:,.2f}  |  Saldo Total Acumulado do Caixa: R$ {saldo_total:,.2f}")
+            y_pos -= 0.5 * cm
+            
+            p.setLineWidth(0.5)
+            p.line(margem_x, y_pos, largura_f - margem_x, y_pos)
+            y_pos -= 0.8 * cm
+            
+            # --- CABEÇALHO DA TABELA ---
+            p.setFont("Helvetica-Bold", 10)
+            p.drawString(margem_x, y_pos, "DIA")
+            p.drawString(margem_x + 1.5*cm, y_pos, "ENTRADAS (R$)")
+            p.drawString(margem_x + 5.0*cm, y_pos, "SAÍDAS (R$)")
+            p.drawString(margem_x + 8.5*cm, y_pos, "MOTIVO / DESCRIÇÃO DOS LANÇAMENTOS")
+            y_pos -= 0.3 * cm
+            p.line(margem_x, y_pos, largura_f - margem_x, y_pos)
+            y_pos -= 0.5 * cm
+            
+            # --- RENDERIZAÇÃO DOS LANÇAMENTOS FLUIDOS ---
+            p.setFont("Helvetica", 9)
+            df_impressao = df_filtro.copy()
+            df_impressao["Dia"] = pd.to_numeric(df_impressao["Dia"], errors='coerce').fillna(0).astype(int)
+            df_impressao = df_impressao.sort_values(by="Dia")
+            
+            for _, row in df_impressao.iterrows():
+                # Validação de quebra de página automática se estourar o limite vertical
+                if y_pos < 2.0 * cm:
+                    p.showPage()
+                    p.setFont("Helvetica", 9)
+                    y_pos = altura_f - 2.0 * cm
+                    
+                    # Reaplica o cabeçalho da tabela na nova folha
+                    p.setFont("Helvetica-Bold", 10)
+                    p.drawString(margem_x, y_pos, "DIA")
+                    p.drawString(margem_x + 1.5*cm, y_pos, "ENTRADAS (R$)")
+                    p.drawString(margem_x + 5.0*cm, y_pos, "SAÍDAS (R$)")
+                    p.drawString(margem_x + 8.5*cm, y_pos, "MOTIVO / DESCRIÇÃO DOS LANÇAMENTOS")
+                    y_pos -= 0.3 * cm
+                    p.line(margem_x, y_pos, largura_f - margem_x, y_pos)
+                    y_pos -= 0.5 * cm
+                    p.setFont("Helvetica", 9)
+                
+                # Renderiza a linha de dados físicos
+                p.drawString(margem_x + 0.1*cm, y_pos, str(int(row["Dia"])))
+                p.drawString(margem_x + 1.5*cm, y_pos, f"R$ {float(row['Entradas']):,.2f}")
+                p.drawString(margem_x + 5.0*cm, y_pos, f"R$ {float(row['Saídas']):,.2f}")
+                
+                # Truncamento básico de segurança na string do motivo para não estourar a margem direita
+                motivo_texto = str(row["Motivo"]).strip()
+                if len(motivo_texto) > 55:
+                    motivo_texto = motivo_texto[:52] + "..."
+                p.drawString(margem_x + 8.5*cm, y_pos, motivo_texto)
+                
+                y_pos -= 0.5 * cm
+            
+            # Fecha o documento PDF e disponibiliza para download
+            p.save()
+            pdf_buffer.seek(0)
+            
+            st.download_button(
+                label=f"📥 Baixar Relatório - {mes_selecionado}.pdf",
+                data=pdf_buffer,
+                file_name=f"relatorio_financeiro_{str(mes_selecionado).replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary"
+            )
