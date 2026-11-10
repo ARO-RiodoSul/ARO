@@ -152,39 +152,50 @@ if torneio_data is not None:
     for i, esp in enumerate(especies_validas): cols[i].metric(label=esp, value=str(contagem[esp]))
     st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
     # =========================================================================================
-    # 🦅 EXCLUSIVO MASTER: GERAR IMAGEM DAS ESTATÍSTICAS PARA WHATSAPP
+      # =========================================================================================
+    # 🦅 EXCLUSIVO MASTER: GERAR IMAGEM DAS ESTATÍSTICAS PARA WHATSAPP (SEM MATPLOTLIB)
     # =========================================================================================
     if role_atual == "master":
         if st.button("📸 Gerar Imagem das Estatísticas (para WhatsApp)", use_container_width=True):
-            import matplotlib.pyplot as plt
+            from PIL import Image, ImageDraw, ImageFont
+            
+            # Dados reais do momento
             dados_whats = {esp: len(df_inscritos_atual[df_inscritos_atual["Espécie"] == esp]) if not df_inscritos_atual.empty else 0 for esp in especies_validas}
             total_gaiolas_whats = sum(dados_whats.values())
             
-            fig, ax = plt.subplots(figsize=(5, 6), facecolor='white')
-            ax.axis('off')
+            # Cria imagem em alta definição (Fundo Branco)
+            img_w, img_h = 600, 550
+            imagem_stats = Image.new("RGB", (img_w, img_h), "#FFFFFF")
+            draw = ImageDraw.Draw(imagem_stats)
             
-            ax.text(0.5, 0.93, "ARO RIO DO SUL", fontsize=16, fontweight='bold', ha='center', color='#1E3A8A')
-            ax.text(0.5, 0.86, "📊 Estatísticas (Confirmadas)", fontsize=13, fontweight='bold', ha='center', color='#262626')
-            ax.plot([0.1, 0.9], [0.82, 0.82], color='black', transform=ax.transAxes, linewidth=1)
+            # Desenha borda externa preta
+            draw.rectangle([(0, 0), (img_w - 1, img_h - 1)], outline="black", width=3)
             
-            y_posicao = 0.72
+            # Carrega fontes padrão do sistema
+            font_padrao = ImageFont.load_default()
+            
+            # Título e Subtítulo
+            draw.text((img_w // 2, 40), "ARO RIO DO SUL", fill="#1E3A8A", font=font_padrao, anchor="mm")
+            draw.text((img_w // 2, 75), "Estatisticas (Confirmadas)", fill="#262626", font=font_padrao, anchor="mm")
+            draw.line([(40, 100), (img_w - 40, 100)], fill="black", width=1)
+            
+            # Lista as espécies e quantidades
+            y_posicao = 140
             for esp, qtd in dados_whats.items():
-                ax.text(0.15, y_posicao, esp, fontsize=12, fontweight='bold', color='#4B5563')
-                ax.text(0.85, y_posicao, str(qtd), fontsize=13, fontweight='bold', ha='right', color='black')
-                y_posicao -= 0.08
+                draw.text((60, y_posicao), f"{esp}", fill="#4B5563", font=font_padrao)
+                draw.text((img_w - 60, y_posicao), f"{qtd}", fill="black", font=font_padrao, anchor="ra")
+                draw.line([(60, y_posicao + 25), (img_w - 60, y_posicao + 25)], fill="#E5E7EB", width=1)
+                y_posicao += 45
                 
-            ax.plot([0.1, 0.9], [y_posicao + 0.03, y_posicao + 0.03], color='black', transform=ax.transAxes, linewidth=1)
-            ax.text(0.5, y_posicao - 0.04, f"✨ TOTAL DE GAIOLAS CONFIRMADAS: {total_gaiolas_whats}", 
-                    fontsize=11, fontweight='bold', ha='center', color='#1E3A8A',
-                    bbox=dict(facecolor='#EBF5FF', edgecolor='#3B82F6', boxstyle='round,pad=0.5'))
+            # Totalizador Geral no Rodapé
+            draw.line([(40, 440), (img_w - 40, 440)], fill="black", width=1)
+            draw.rectangle([(40, 465), (img_w - 40, 515)], fill="#EBF5FF", outline="#3B82F6", width=1)
+            draw.text((img_w // 2, 490), f"TOTAL DE GAIOLAS CONFIRMADAS: {total_gaiolas_whats}", fill="#1E3A8A", font=font_padrao, anchor="mm")
             
-            fig.patch.set_linewidth(2)
-            fig.patch.set_edgecolor('black')
-            
+            # Converte para buffer de memória para o download
             buf_whats = io.BytesIO()
-            plt.savefig(buf_whats, format="png", dpi=300, bbox_inches='tight')
+            imagem_stats.save(buf_whats, format="PNG")
             buf_whats.seek(0)
-            plt.close(fig)
             
             st.download_button(
                 label="📥 Baixar Imagem das Estatísticas para o Celular / PC",
