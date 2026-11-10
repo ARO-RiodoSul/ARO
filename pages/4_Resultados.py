@@ -67,7 +67,6 @@ if is_admin:
         
         with st.form("form_lote_individual_ajustado", clear_on_submit=True):
             col_r1, col_r2, col_r3 = st.columns(3)
-            # Mudado para NumberInput para permitir qualquer número de colocação livremente
             num_colocacao = col_r1.number_input("Colocação (Nº):", min_value=1, step=1, value=1)
             r_proprietario = col_r2.text_input("Proprietário:")
             r_ave = col_r3.text_input("Nome da Ave:")
@@ -119,7 +118,6 @@ if is_admin:
                 st.session_state["lista_lote_resultados"] = []
                 st.success("🎯 Todos os resultados da etapa foram consolidados e salvos globalmente com sucesso!")
                 st.rerun()
-
 # =========================================================================================
 # 📊 EXIBIÇÃO DOS DADOS: VISÍVEL PARA MASTER, DIRETORIA, SÓCIOS E VISITANTES
 # =========================================================================================
@@ -256,7 +254,8 @@ if opcao_tela == "📅 Resultados por Etapa":
                             data=pdf_buffer,
                             file_name=f"resultado_{esp_nome.lower().replace(' ', '_')}_{data_sel.replace('/', '_')}.pdf",
                             mime="application/pdf",
-                            use_container_width=True
+                            use_container_width=True,
+                            key=f"dl_btn_pdf_{esp_nome}_{data_sel}"
                         )
 # --- TELA 2: CLASSIFICAÇÃO GERAL ACUMULADA DO CAMPEONATO (SOMA AUTOMÁTICA) ---
 else:
@@ -330,20 +329,8 @@ if role_atual == "master":
             st.success("🔄 Alterações salvas e sincronizadas no servidor com sucesso!")
             st.rerun()
 
-    st.write("---")
-    with st.expander("🗑️ Central de Redefinição de Resultados (Exclusivo Master)"):
-        st.warning("🚨 ATENÇÃO: O botão abaixo apagará permanentemente todo o histórico de etapas e pontos acumulados!")
-        if st.button("Limpar Todos os Resultados do Banco", use_container_width=True, type="primary"):
-            st.session_state["banco_resultados_viva"] = {
-                "historico_etapas": pd.DataFrame(columns=["Data", "Espécie", "Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]),
-                "campeonato_geral": pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Pontuação Acumulada"])
-            }
-            with open(ARQUIVO_RESULTADOS, "wb") as f:
-                pickle.dump(st.session_state["banco_resultados_viva"], f)
-            st.success("Banco de resultados reinicializado com sucesso!")
-            st.rerun()
-       # =========================================================================================
-    # 💾 CENTRAL DE SEGURANÇA: BACKUPS E REDEFINIÇÃO (EXCLUSIVO MASTER - REVISADO)
+    # =========================================================================================
+    # 💾 CENTRAL DE SEGURANÇA: BACKUPS E REDEFINIÇÃO COM CHAVES COMPLETAMENTE ISOLADAS
     # =========================================================================================
     st.write("---")
     st.markdown("### 💾 Central de Segurança e Backups (Master)")
@@ -357,17 +344,18 @@ if role_atual == "master":
             data=buffer_pkl_res, 
             file_name=f"backup_resultados_aro_{datetime.date.today().strftime('%d_%m_%Y')}.pkl", 
             mime="application/octet-stream", 
-            use_container_width=True
+            use_container_width=True,
+            key="btn_exportar_backup_resultados_oficial_unico"
         )
         
     with cb_res2:
         st.markdown("**Importar Resultados**")
-        arq_sub_res = st.file_uploader("Subir arquivo de backup de resultados:", type=["pkl"], key="up_resultados_master_nova")
+        arq_sub_res = st.file_uploader("Subir arquivo de backup de resultados:", type=["pkl"], key="up_resultados_master_nova_final_revisada")
         if arq_sub_res is not None:
             try:
                 resultados_carregados = pickle.load(arq_sub_res)
                 if "historico_etapas" in resultados_carregados:
-                    if st.button("🔄 Confirmar Restauração Geral de Resultados", use_container_width=True, type="primary", key="btn_confirmar_restauracao_res"):
+                    if st.button("🔄 Confirmar Restauração Geral de Resultados", use_container_width=True, type="primary", key="btn_confirmar_restauracao_res_final_revisado"):
                         st.session_state["banco_resultados_viva"] = resultados_carregados
                         with open(ARQUIVO_RESULTADOS, "wb") as f:
                             pickle.dump(resultados_carregados, f)
@@ -377,107 +365,11 @@ if role_atual == "master":
             except: 
                 st.error("Arquivo corrompido ou inválido.")
 
-    # Expander final com chave exclusiva de segurança para evitar erro de duplicidade
+    # Expander de redefinição protegido por chave única para evitar erro de ID duplicado
     st.write("---")
     with st.expander("🗑️ Central de Redefinição de Resultados (Exclusivo Master)"):
         st.warning("🚨 ATENÇÃO: O botão abaixo apagará permanentemente todo o histórico de etapas e pontos acumulados!")
-        if st.button("Limpar Todos os Resultados do Banco", use_container_width=True, type="primary", key="btn_reset_definitivo_resultados"):
-            st.session_state["banco_resultados_viva"] = {
-                "historico_etapas": pd.DataFrame(columns=["Data", "Espécie", "Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]),
-                "campeonato_geral": pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Pontuação Acumulada"])
-            }
-            with open(ARQUIVO_RESULTADOS, "wb") as f:
-                pickle.dump(st.session_state["banco_resultados_viva"], f)
-            st.success("Banco de resultados reinicializado com sucesso!")
-            st.rerun()
-    # =========================================================================================
-    # 💾 CENTRAL DE SEGURANÇA: BACKUPS E REDEFINIÇÃO (EXCLUSIVO MASTER - REVISADO)
-    # =========================================================================================
-    st.write("---")
-    st.markdown("### 💾 Central de Segurança e Backups (Master)")
-    cb_res1, cb_res2 = st.columns(2)
-    
-    with cb_res1:
-        st.markdown("**Exportar Resultados**")
-        buffer_pkl_res = pickle.dumps(st.session_state["banco_resultados_viva"])
-        st.download_button(
-            label="📥 Exportar Backup de Resultados (.PKL)", 
-            data=buffer_pkl_res, 
-            file_name=f"backup_resultados_aro_{datetime.date.today().strftime('%d_%m_%Y')}.pkl", 
-            mime="application/octet-stream", 
-            use_container_width=True
-        )
-        
-    with cb_res2:
-        st.markdown("**Importar Resultados**")
-        arq_sub_res = st.file_uploader("Subir arquivo de backup de resultados:", type=["pkl"], key="up_resultados_master_nova")
-        if arq_sub_res is not None:
-            try:
-                resultados_carregados = pickle.load(arq_sub_res)
-                if "historico_etapas" in resultados_carregados:
-                    if st.button("🔄 Confirmar Restauração Geral de Resultados", use_container_width=True, type="primary", key="btn_confirmar_restauracao_res"):
-                        st.session_state["banco_resultados_viva"] = resultados_carregados
-                        with open(ARQUIVO_RESULTADOS, "wb") as f:
-                            pickle.dump(resultados_carregados, f)
-                        st.success("🏆 Banco de resultados e pontuações do campeonato restaurado com sucesso!"); st.rerun()
-                else:
-                    st.error("Arquivo inválido. Formato de estrutura não reconhecido.")
-            except: 
-                st.error("Arquivo corrompido ou inválido.")
-
-    # Expander final com chave exclusiva de segurança para evitar erro de duplicidade
-    st.write("---")
-    with st.expander("🗑️ Central de Redefinição de Resultados (Exclusivo Master)"):
-        st.warning("🚨 ATENÇÃO: O botão abaixo apagará permanentemente todo o histórico de etapas e pontos acumulados!")
-        if st.button("Limpar Todos os Resultados do Banco", use_container_width=True, type="primary", key="btn_reset_definitivo_resultados"):
-            st.session_state["banco_resultados_viva"] = {
-                "historico_etapas": pd.DataFrame(columns=["Data", "Espécie", "Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]),
-                "campeonato_geral": pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Pontuação Acumulada"])
-            }
-            with open(ARQUIVO_RESULTADOS, "wb") as f:
-                pickle.dump(st.session_state["banco_resultados_viva"], f)
-            st.success("Banco de resultados reinicializado com sucesso!")
-            st.rerun()
-    # =========================================================================================
-    # 💾 CENTRAL DE SEGURANÇA: BACKUPS E REDEFINIÇÃO (EXCLUSIVO MASTER - REVISADO)
-    # =========================================================================================
-    st.write("---")
-    st.markdown("### 💾 Central de Segurança e Backups (Master)")
-    cb_res1, cb_res2 = st.columns(2)
-    
-    with cb_res1:
-        st.markdown("**Exportar Resultados**")
-        buffer_pkl_res = pickle.dumps(st.session_state["banco_resultados_viva"])
-        st.download_button(
-            label="📥 Exportar Backup de Resultados (.PKL)", 
-            data=buffer_pkl_res, 
-            file_name=f"backup_resultados_aro_{datetime.date.today().strftime('%d_%m_%Y')}.pkl", 
-            mime="application/octet-stream", 
-            use_container_width=True
-        )
-        
-    with cb_res2:
-        st.markdown("**Importar Resultados**")
-        arq_sub_res = st.file_uploader("Subir arquivo de backup de resultados:", type=["pkl"], key="up_resultados_master_nova")
-        if arq_sub_res is not None:
-            try:
-                resultados_carregados = pickle.load(arq_sub_res)
-                if "historico_etapas" in resultados_carregados:
-                    if st.button("🔄 Confirmar Restauração Geral de Resultados", use_container_width=True, type="primary", key="btn_confirmar_restauracao_res"):
-                        st.session_state["banco_resultados_viva"] = resultados_carregados
-                        with open(ARQUIVO_RESULTADOS, "wb") as f:
-                            pickle.dump(resultados_carregados, f)
-                        st.success("🏆 Banco de resultados e pontuações do campeonato restaurado com sucesso!"); st.rerun()
-                else:
-                    st.error("Arquivo inválido. Formato de estrutura não reconhecido.")
-            except: 
-                st.error("Arquivo corrompido ou inválido.")
-
-    # Expander final com chave exclusiva de segurança para evitar erro de duplicidade
-    st.write("---")
-    with st.expander("🗑️ Central de Redefinição de Resultados (Exclusivo Master)"):
-        st.warning("🚨 ATENÇÃO: O botão abaixo apagará permanentemente todo o histórico de etapas e pontos acumulados!")
-        if st.button("Limpar Todos os Resultados do Banco", use_container_width=True, type="primary", key="btn_reset_definitivo_resultados"):
+        if st.button("Limpar Todos os Resultados do Banco", use_container_width=True, type="primary", key="btn_reset_definitivo_resultados_final_revisado"):
             st.session_state["banco_resultados_viva"] = {
                 "historico_etapas": pd.DataFrame(columns=["Data", "Espécie", "Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]),
                 "campeonato_geral": pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Pontuação Acumulada"])
