@@ -162,8 +162,51 @@ else:
                         use_container_width=True
                     )
 
-# --- BOTÃO EXCLUSIVO MASTER PARA RESETAR O CAMPEONATO SE NECESSÁRIO ---
+# =========================================================================================
+# ⚙️ EXCLUSIVO ADMINISTRATIVO: CENTRAL DE EDIÇÃO, CORREÇÃO E RESET (EXCLUSIVO MASTER)
+# =========================================================================================
 if role_atual == "master":
+    st.write("---")
+    st.markdown("### 🛠️ Central de Gerenciamento de Resultados (Master)")
+    st.caption("📝 Caso digite uma Anilha, Nome ou Canto errado, corrija diretamente na tabela abaixo. O sistema atualizará a Classificação Geral automaticamente.")
+    
+    if df_etapas.empty:
+        st.caption("Nenhum lançamento para gerenciar ou corrigir no momento.")
+    else:
+        # Abre a tabela de histórico em modo de edição dinâmica
+        df_editado_res = st.data_editor(
+            df_etapas,
+            hide_index=True,
+            column_config={
+                "Data": st.column_config.TextColumn("Data", required=True),
+                "Espécie": st.column_config.SelectboxColumn("Espécie", options=especies_validas, required=True),
+                "Colocação": st.column_config.SelectboxColumn("Colocação", options=[f"{i}º Lugar" for i in range(1, 11)], required=True),
+                "Proprietário": st.column_config.TextColumn("Proprietário", required=True),
+                "Nome da Ave": st.column_config.TextColumn("Nome da Ave", required=True),
+                "Anilha": st.column_config.TextColumn("Anilha", required=True),
+                "Cantos": st.column_config.NumberColumn("Cantos", min_value=0, step=1),
+                "Pontos": st.column_config.NumberColumn("Pontos", min_value=0, step=1, disabled=True)
+            },
+            key="gerenciador_editor_resultados",
+            use_container_width=True
+        )
+        
+        # Se o Master alterar qualquer célula (como corrigir uma anilha errada)
+        if not df_editado_res.equals(df_etapas):
+            # Recalcula os pontos caso o Master mude a Colocação na edição manual
+            pontos_map_edit = {"1º Lugar": 10, "2º Lugar": 9, "3º Lugar": 8, "4º Lugar": 7, "5º Lugar": 6, "6º Lugar": 5, "7º Lugar": 4, "8º Lugar": 3, "9º Lugar": 2, "10º Lugar": 1}
+            df_editado_res["Pontos"] = df_editado_res["Colocação"].map(pontos_map_edit).fillna(0).astype(int)
+            
+            # Limpa registros inválidos e salva no arquivo físico
+            df_editado_res = df_editado_res.dropna(subset=["Anilha"]).reset_index(drop=True)
+            st.session_state["banco_resultados_viva"]["historico_etapas"] = df_editado_res
+            
+            with open(ARQUIVO_RESULTADOS, "wb") as f:
+                pickle.dump(st.session_state["banco_resultados_viva"], f)
+            st.success("🔄 Alterações salvas e sincronizadas no servidor com sucesso!")
+            st.rerun()
+
+    # Mantém o seu botão original de resetar posicionado logo abaixo
     st.write("---")
     with st.expander("🗑️ Central de Redefinição de Resultados (Exclusivo Master)"):
         st.warning("🚨 ATENÇÃO: O botão abaixo apagará permanentemente todo o histórico de etapas e pontos acumulados!")
@@ -172,8 +215,7 @@ if role_atual == "master":
                 "historico_etapas": pd.DataFrame(columns=["Data", "Espécie", "Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]),
                 "campeonato_geral": pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Pontuação Acumulada"])
             }
-            salvar_resultados_files = st.session_state["banco_resultados_viva"]
-            with open(ARQUIVO_RESULTS if 'ARQUIVO_RESULTS' in locals() else ARQUIVO_RESULTADOS, "wb") as f:
+            with open(ARQUIVO_RESULTADOS, "wb") as f:
                 pickle.dump(st.session_state["banco_resultados_viva"], f)
             st.success("Banco de resultados reinicializado com sucesso!")
             st.rerun()
