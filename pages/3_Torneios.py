@@ -151,6 +151,50 @@ if torneio_data is not None:
     cols = st.columns(6)
     for i, esp in enumerate(especies_validas): cols[i].metric(label=esp, value=str(contagem[esp]))
     st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
+    # =========================================================================================
+    # 🦅 EXCLUSIVO MASTER: GERAR IMAGEM DAS ESTATÍSTICAS PARA WHATSAPP
+    # =========================================================================================
+    if role_atual == "master":
+        if st.button("📸 Gerar Imagem das Estatísticas (para WhatsApp)", use_container_width=True):
+            import matplotlib.pyplot as plt
+            dados_whats = {esp: len(df_inscritos_atual[df_inscritos_atual["Espécie"] == esp]) if not df_inscritos_atual.empty else 0 for esp in especies_validas}
+            total_gaiolas_whats = sum(dados_whats.values())
+            
+            fig, ax = plt.subplots(figsize=(5, 6), facecolor='white')
+            ax.axis('off')
+            
+            ax.text(0.5, 0.93, "ARO RIO DO SUL", fontsize=16, fontweight='bold', ha='center', color='#1E3A8A')
+            ax.text(0.5, 0.86, "📊 Estatísticas (Confirmadas)", fontsize=13, fontweight='bold', ha='center', color='#262626')
+            ax.plot([0.1, 0.9], [0.82, 0.82], color='black', transform=ax.transAxes, linewidth=1)
+            
+            y_posicao = 0.72
+            for esp, qtd in dados_whats.items():
+                ax.text(0.15, y_posicao, esp, fontsize=12, fontweight='bold', color='#4B5563')
+                ax.text(0.85, y_posicao, str(qtd), fontsize=13, fontweight='bold', ha='right', color='black')
+                y_posicao -= 0.08
+                
+            ax.plot([0.1, 0.9], [y_posicao + 0.03, y_posicao + 0.03], color='black', transform=ax.transAxes, linewidth=1)
+            ax.text(0.5, y_posicao - 0.04, f"✨ TOTAL DE GAIOLAS CONFIRMADAS: {total_gaiolas_whats}", 
+                    fontsize=11, fontweight='bold', ha='center', color='#1E3A8A',
+                    bbox=dict(facecolor='#EBF5FF', edgecolor='#3B82F6', boxstyle='round,pad=0.5'))
+            
+            fig.patch.set_linewidth(2)
+            fig.patch.set_edgecolor('black')
+            
+            buf_whats = io.BytesIO()
+            plt.savefig(buf_whats, format="png", dpi=300, bbox_inches='tight')
+            buf_whats.seek(0)
+            plt.close(fig)
+            
+            st.download_button(
+                label="📥 Baixar Imagem das Estatísticas para o Celular / PC",
+                data=buf_whats,
+                file_name="estatisticas_torneio_aro.png",
+                mime="image/png",
+                use_container_width=True,
+                type="primary"
+            )
+
 
 if is_admin and torneio_data is not None:
     st.write("---")
