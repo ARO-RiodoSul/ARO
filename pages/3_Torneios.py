@@ -58,29 +58,29 @@ df_inscritos_atual = st.session_state["dados_torneios_internos"]
 df_pendentes_atual = st.session_state["inscricoes_pendentes_aro"]
 # =========================================================================================
 # =========================================================================================
-# 🌐 ÁREA DO VISITANTE: SOLICITAR INSCRIÇÃO COM CONFIRMAÇÃO EM DESTAQUE (NÃO SOME SOZINHA)
+# =========================================================================================
+# 🌐 ÁREA DO VISITANTE: SOLICITAR INSCRIÇÃO + CONSULTA DE CONFIRMADOS POR ESPÉCIE E ESTACA
 # =========================================================================================
 if role_atual == "visitante":
     if torneio_data is None:
         st.info("💡 Quando um torneio for cadastrado pela diretoria, o formulário de inscrições para visitantes aparecerá aqui automaticamente.")
     else:
-        # Cria uma chave na memória para controlar se a inscrição acabou de ser enviada
         if "sucesso_inscricao_visitante" not in st.session_state:
             st.session_state["sucesso_inscricao_visitante"] = False
 
         st.write("---")
         
-        # Se o visitante acabou de enviar o formulário, mostra apenas a tela de sucesso gigante
+        # 1. TELA DE SUCESSO GRANDE (SE ELE ACABOU DE ENVIAR)
         if st.session_state["sucesso_inscricao_visitante"]:
-            st.markdown("<br><br>", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
             st.success("### 🎉 INSCRIÇÃO SOLICITADA COM SUCESSO!")
             st.markdown(
                 """
                 <div style='background-color: #DEF7EC; padding: 20px; border-radius: 8px; border-left: 5px solid #0E9F6E;'>
                     <h3 style='color: #03543F; margin-top: 0;'>🚨 Atenção, Competidor!</h3>
                     <p style='color: #046C4E; font-size: 16px; font-weight: bold;'>
-                        Sua solicitação foi salva no nosso banco de dados. Agora, basta aguardar a aprovação 
-                        de um membro da diretoria da ARO para confirmar a sua gaiola e o número da sua estaca!
+                        Sua solicitação foi salva. Assim que um membro da diretoria da ARO aprovar, 
+                        o seu nome e o número da sua estaca aparecerão na tabela de competidores abaixo!
                     </p>
                 </div>
                 <br>
@@ -88,16 +88,13 @@ if role_atual == "visitante":
                 unsafe_allow_html=True
             )
             st.balloons()
-            
-            # Botão grande para ele clicar se quiser registrar outra ave
-            if st.button("➕ Realizar Nova Inscrição Avulsa", use_container_width=True, type="primary"):
+            if st.button("➕ Realizar Outra Inscrição Avulsa", use_container_width=True, type="primary"):
                 st.session_state["sucesso_inscricao_visitante"] = False
                 st.rerun()
                 
         else:
-            # Caso contrário, renderiza o formulário normalmente
+            # 2. FORMULÁRIO DE INSCRIÇÃO DISPONÍVEL
             st.markdown("### 📝 inscrição para não socio")
-            
             with st.form("form_solicitacao_visitante_visual", clear_on_submit=True):
                 v_proprietario = st.text_input("Proprietario:")
                 v_ave = st.text_input("Ave:")
@@ -111,7 +108,6 @@ if role_atual == "visitante":
                     if not v_proprietario.strip() or not v_ave.strip() or not v_anilha.strip() or not v_clube.strip():
                         st.error("❌ Por favor, preencha todos os campos do formulário antes de enviar.")
                     else:
-                        # Insere a ave na planilha de pendentes física
                         nova_solicitacao_v = pd.DataFrame([{
                             "Proprietário": v_proprietario.strip(),
                             "Nome da Ave": v_ave.strip(),
@@ -120,15 +116,28 @@ if role_atual == "visitante":
                             "Valor": 35.0,
                             "Clube": v_clube.strip()
                         }])
-                        
                         st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_solicitacao_v], ignore_index=True)
                         salvar_dados_fisicos()
-                        
-                        # Ativa o aviso fixo de sucesso e recarrega a página mudando o layout
                         st.session_state["sucesso_inscricao_visitante"] = True
                         st.rerun()
-                        
-    st.stop()  # 🛑 TRAVA DO VISITANTE: Protege suas abas por espécie, etiquetas e reset abaixo
+
+        # 3. TABELA DE CONSULTA DE ESTACAS PARA O VISITANTE (REPLICANDO O SEU PADRÃO)
+        st.write("---")
+        st.markdown("### 🏆 Competidores Confirmados por Categoria")
+        abas_v = st.tabs(especies_validas)
+        for i, esp in enumerate(especies_validas):
+            with abas_v[i]:
+                df_f = df_inscritos_atual[df_inscritos_atual["Espécie"] == esp].copy() if not df_inscritos_atual.empty else pd.DataFrame()
+                if df_f.empty:
+                    st.caption(f"Nenhum competidor confirmado para {esp} até o momento.")
+                else:
+                    df_f["Estaca"] = pd.to_numeric(df_f["Estaca"], errors="coerce").fillna(0).astype(int)
+                    df_f = df_f.sort_values(by="Estaca").reset_index(drop=True)
+                    st.dataframe(df_f[["Estaca", "Proprietário", "Nome da Ave", "Anilha", "Clube"]], hide_index=True, use_container_width=True)
+                    
+    st.stop()  # 🛑 TRAVA DO VISITANTE: Impede o carregamento dos painéis de gerência do Master abaixo
+
+
 
 if torneio_data is not None:
     st.markdown("### 📊 Estatísticas (Confirmadas)")
