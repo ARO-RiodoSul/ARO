@@ -54,9 +54,10 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
 
     for y in range(ALTURA):
         fator = y / ALTURA
-        r = int(COR_TOPO + (COR_BASE - COR_TOPO) * fator)
+               r = int(COR_TOPO + (COR_BASE - COR_TOPO) * fator)
         g = int(COR_TOPO + (COR_BASE - COR_TOPO) * fator)
         b = int(COR_TOPO + (COR_BASE - COR_TOPO) * fator)
+
         draw.line([(0, y), (LARGURA, y)], fill=(r, g, b))
 
     draw.rectangle([22, 22, LARGURA - 22, ALTURA - 22], outline=COR_DESTAQUE, width=4)
