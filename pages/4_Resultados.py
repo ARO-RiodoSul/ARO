@@ -22,11 +22,12 @@ especies_validas = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "A
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 ARQUIVO_RESULTADOS = "backup_resultados_oficial.pkl"
-
 def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, modo="etapa"):
-    LARGURA = 1080
+    import reportlab
+    LARGURA = 1200
     qtd_itens = len(df_dados)
-    ALTURA = max(1350, 500 + (qtd_itens * 96) + 110)
+    # Cards mais altos (126px + espaçamento) para acomodar letras grandes e negrito com folga
+    ALTURA = max(1450, 560 + (qtd_itens * 144) + 120)
 
     if modo == "geral":
         COR_TOPO = (15, 23, 42)
@@ -40,17 +41,18 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
         COR_TEXTO_FAIXA = (12, 26, 62)
 
     COR_BRANCO = (255, 255, 255)
-    COR_SUAVE = (203, 213, 225)
-    COR_CARD_NORMAL = (30, 58, 115) if modo == "etapa" else (38, 52, 75)
+    COR_SUAVE = (226, 232, 240)
+    COR_CARD_NORMAL = (28, 56, 115) if modo == "etapa" else (38, 52, 78)
 
     ESTILO_PODIO = {
-        1: {"card": (212, 175, 55), "texto": (25, 20, 5), "sub": (55, 45, 10), "badge": (255, 255, 255), "num": (180, 130, 10)},
-        2: {"card": (203, 213, 225), "texto": (20, 25, 35), "sub": (50, 60, 75), "badge": (255, 255, 255), "num": (71, 85, 105)},
-        3: {"card": (205, 127, 50), "texto": (30, 15, 5), "sub": (65, 35, 10), "badge": (255, 255, 255), "num": (154, 85, 25)},
+        1: {"card": (218, 178, 50), "texto": (20, 15, 5), "sub": (45, 35, 10), "badge": (255, 255, 255), "num": (175, 125, 10)},
+        2: {"card": (208, 218, 230), "texto": (15, 23, 42), "sub": (40, 50, 68), "badge": (255, 255, 255), "num": (65, 80, 100)},
+        3: {"card": (208, 130, 55), "texto": (25, 12, 5), "sub": (55, 30, 10), "badge": (255, 255, 255), "num": (150, 80, 20)},
     }
 
     img = Image.new("RGB", (LARGURA, ALTURA), COR_TOPO)
     draw = ImageDraw.Draw(img)
+
     r1, g1, b1 = COR_TOPO
     r2, g2, b2 = COR_BASE
     for y in range(ALTURA):
@@ -60,60 +62,78 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
         b = int(b1 + (b2 - b1) * fator)
         draw.line([(0, y), (LARGURA, y)], fill=(r, g, b))
 
-    draw.rectangle([22, 22, LARGURA - 22, ALTURA - 22], outline=COR_DESTAQUE, width=4)
-    draw.rectangle([32, 32, LARGURA - 32, ALTURA - 32], outline=(255, 255, 255), width=1)
+    draw.rectangle([24, 24, LARGURA - 24, ALTURA - 24], outline=COR_DESTAQUE, width=5)
+    draw.rectangle([36, 36, LARGURA - 36, ALTURA - 36], outline=(255, 255, 255), width=1)
 
-    def get_font(size, bold=False):
-        caminhos = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "arialbd.ttf" if bold else "arial.ttf",
+    # Busca garantida de fonte TrueType com suporte total a acentos (PT-BR) e Negrito
+    def carregar_fonte_segura(tamanho, negrito=True):
+        rl_dir = os.path.dirname(reportlab.__file__)
+        candidatos = [
+            os.path.join(rl_dir, "fonts", "VeraBd.ttf" if negrito else "Vera.ttf"),
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if negrito else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if negrito else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "arialbd.ttf" if negrito else "arial.ttf",
         ]
-        for c in caminhos:
-            if os.path.exists(c):
-                return ImageFont.truetype(c, size)
-        return ImageFont.load_default()
+        # Varredura automática caso o servidor use outra pasta de fontes
+        if os.path.exists("/usr/share/fonts"):
+            for raiz, _, arquivos in os.walk("/usr/share/fonts"):
+                for arq in arquivos:
+                    if arq.lower().endswith(".ttf"):
+                        if negrito and ("bold" in arq.lower() or "bd" in arq.lower()):
+                            candidatos.append(os.path.join(raiz, arq))
+                        elif not negrito:
+                            candidatos.append(os.path.join(raiz, arq))
 
-    f_clube = get_font(22, bold=True)
-    f_titulo = get_font(48, bold=True)
-    f_subtitulo = get_font(25, bold=False)
-    f_especie = get_font(30, bold=True)
-    f_pos = get_font(30, bold=True)
-    f_ave = get_font(28, bold=True)
-    f_detalhe = get_font(21, bold=False)
-    f_pontos = get_font(30, bold=True)
-    f_rodape = get_font(19, bold=False)
+        for caminho in candidatos:
+            if os.path.exists(caminho):
+                try:
+                    return ImageFont.truetype(caminho, tamanho)
+                except Exception:
+                    continue
+        return ImageFont.load_default(size=tamanho)
 
-    y_cursor = 55
+    # Tamanhos grandes e em negrito para leitura imediata no celular
+    f_clube = carregar_fonte_segura(26, negrito=True)
+    f_titulo = carregar_fonte_segura(54, negrito=True)
+    f_subtitulo = carregar_fonte_segura(30, negrito=True)
+    f_especie = carregar_fonte_segura(36, negrito=True)
+    f_pos = carregar_fonte_segura(38, negrito=True)
+    f_ave = carregar_fonte_segura(35, negrito=True)
+    f_detalhe = carregar_fonte_segura(26, negrito=True)
+    f_pontos = carregar_fonte_segura(40, negrito=True)
+    f_rodape = carregar_fonte_segura(22, negrito=True)
+
+    y_cursor = 60
 
     if os.path.exists(LOGO_PATH):
         try:
             logo = Image.open(LOGO_PATH).convert("RGBA")
-            altura_logo = 145
+            altura_logo = 160
             proporcao = altura_logo / logo.height
             largura_logo = int(logo.width * proporcao)
             logo = logo.resize((largura_logo, altura_logo), Image.Resampling.LANCZOS)
             img.paste(logo, ((LARGURA - largura_logo) // 2, y_cursor), logo)
-            y_cursor += altura_logo + 22
+            y_cursor += altura_logo + 28
         except Exception:
-            y_cursor += 15
+            y_cursor += 20
     else:
-        y_cursor += 15
+        y_cursor += 20
 
     draw.text((LARGURA // 2, y_cursor), "ARO - ASSOCIAÇÃO RIO DO SUL DE ORNITOLOGIA", font=f_clube, fill=COR_DESTAQUE, anchor="mm")
-    y_cursor += 44
+    y_cursor += 50
     draw.text((LARGURA // 2, y_cursor), titulo_banner.upper(), font=f_titulo, fill=COR_BRANCO, anchor="mm")
-    y_cursor += 44
+    y_cursor += 50
     draw.text((LARGURA // 2, y_cursor), subtitulo_info, font=f_subtitulo, fill=COR_SUAVE, anchor="mm")
-    y_cursor += 55
+    y_cursor += 64
 
-    draw.rounded_rectangle([120, y_cursor - 26, LARGURA - 120, y_cursor + 28], radius=16, fill=COR_DESTAQUE)
+    # Faixa destaque da Espécie
+    draw.rounded_rectangle([110, y_cursor - 32, LARGURA - 110, y_cursor + 34], radius=18, fill=COR_DESTAQUE)
     draw.text((LARGURA // 2, y_cursor), f"MODALIDADE: {especie.upper()}", font=f_especie, fill=COR_TEXTO_FAIXA, anchor="mm")
-    y_cursor += 68
+    y_cursor += 82
 
-    margem_x = 58
+    margem_x = 60
     largura_card = LARGURA - (margem_x * 2)
-    altura_card = 82
+    altura_card = 124
 
     for idx, row in df_dados.iterrows():
         pos_num = idx + 1
@@ -126,34 +146,34 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
         else:
             c_card, c_txt, c_sub, c_badge, c_num = COR_CARD_NORMAL, COR_BRANCO, COR_SUAVE, COR_DESTAQUE, COR_TEXTO_FAIXA
 
-        draw.rounded_rectangle([margem_x, y_cursor, margem_x + largura_card, y_cursor + altura_card], radius=14, fill=c_card)
+        draw.rounded_rectangle([margem_x, y_cursor, margem_x + largura_card, y_cursor + altura_card], radius=18, fill=c_card)
 
         cy = y_cursor + (altura_card // 2)
-        draw.ellipse([margem_x + 16, cy - 26, margem_x + 68, cy + 26], fill=c_badge)
-        draw.text((margem_x + 42, cy), f"{pos_num}º", font=f_pos, fill=c_num, anchor="mm")
+        draw.ellipse([margem_x + 20, cy - 36, margem_x + 92, cy + 36], fill=c_badge)
+        draw.text((margem_x + 56, cy), f"{pos_num}º", font=f_pos, fill=c_num, anchor="mm")
 
         nome_ave = str(row["Nome da Ave"]).upper()
         proprietario = str(row["Proprietário"]).upper()
         anilha = str(row["Anilha"]).upper()
 
-        linha_1 = f"{nome_ave[:22]}  •  {proprietario[:24]}"
+        linha_1 = f"{nome_ave[:20]} • {proprietario[:22]}"
         if modo == "etapa":
             cantos_val = int(row["Cantos"])
-            linha_2 = f"Anilha: {anilha}   |   Cantos: {cantos_val}"
+            linha_2 = f"ANILHA: {anilha}   |   CANTOS: {cantos_val}"
             pts_val = int(row["Pontos"])
         else:
-            linha_2 = f"Anilha: {anilha}"
+            linha_2 = f"ANILHA: {anilha}"
             pts_val = int(row["Pontuação Acumulada"])
 
-        draw.text((margem_x + 86, y_cursor + 24), linha_1, font=f_ave, fill=c_txt, anchor="lm")
-        draw.text((margem_x + 86, y_cursor + 58), linha_2, font=f_detalhe, fill=c_sub, anchor="lm")
-        draw.text((margem_x + largura_card - 24, cy), f"{pts_val} pts", font=f_pontos, fill=c_txt, anchor="rm")
+        draw.text((margem_x + 115, y_cursor + 38), linha_1, font=f_ave, fill=c_txt, anchor="lm")
+        draw.text((margem_x + 115, y_cursor + 88), linha_2, font=f_detalhe, fill=c_sub, anchor="lm")
+        draw.text((margem_x + largura_card - 28, cy), f"{pts_val} PTS", font=f_pontos, fill=c_txt, anchor="rm")
 
-        y_cursor += altura_card + 14
+        y_cursor += altura_card + 18
 
     draw.text(
-        (LARGURA // 2, ALTURA - 45),
-        f"Resultado Oficial ARO • Emitido em {datetime.date.today().strftime('%d/%m/%Y')}",
+        (LARGURA // 2, ALTURA - 52),
+        f"RESULTADO OFICIAL ARO • EMITIDO EM {datetime.date.today().strftime('%d/%m/%Y')}",
         font=f_rodape,
         fill=COR_SUAVE,
         anchor="mm"
@@ -163,6 +183,8 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
     img.save(img_buffer, format="PNG", quality=95)
     img_buffer.seek(0)
     return img_buffer
+
+
 # --- CARREGAMENTO FÍSICO DOS DADOS ---
 def carregar_resultados_fisicos():
     if os.path.exists(ARQUIVO_RESULTADOS):
