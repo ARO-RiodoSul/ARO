@@ -51,13 +51,13 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
 
     img = Image.new("RGB", (LARGURA, ALTURA), COR_TOPO)
     draw = ImageDraw.Draw(img)
-
+    r1, g1, b1 = COR_TOPO
+    r2, g2, b2 = COR_BASE
     for y in range(ALTURA):
         fator = y / ALTURA
-        r = int(COR_TOPO + (COR_BASE - COR_TOPO) * fator)
-        g = int(COR_TOPO + (COR_BASE - COR_TOPO) * fator)
-        b = int(COR_TOPO + (COR_BASE - COR_TOPO) * fator)
-
+        r = int(r1 + (r2 - r1) * fator)
+        g = int(g1 + (g2 - g1) * fator)
+        b = int(b1 + (b2 - b1) * fator)
         draw.line([(0, y), (LARGURA, y)], fill=(r, g, b))
 
     draw.rectangle([22, 22, LARGURA - 22, ALTURA - 22], outline=COR_DESTAQUE, width=4)
