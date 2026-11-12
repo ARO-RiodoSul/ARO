@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import datetime, io, pickle, os
+import datetime, io, pickle, os, base64, json
+import urllib.request, urllib.error
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
@@ -17,16 +18,104 @@ st.title("🏆 Resultados e Classificação Geral - ARO")
 
 role_atual = str(st.session_state.get("user_role", "")).strip().lower()
 is_admin = role_atual in ["master", "diretoria", "admin"]
+is_master = role_atual == "master"
 especies_validas = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 ARQUIVO_RESULTADOS = "backup_resultados_oficial.pkl"
+
+# =========================================================================================
+# ☁️ SISTEMA DE BACKUP DUPLO (LOCAL + ENVIO AUTOMÁTICO PARA O GITHUB)
+# =========================================================================================
+def enviar_backup_github(conteudo_bytes):
+    try:
+        token = st.secrets.get("GITHUB_TOKEN", "")
+        repo = st.secrets.get("GITHUB_REPO", "")
+        if not token or not repo:
+            return False, "Token não configurado nos Secrets"
+
+        url = f"https://github.com{repo}/contents/{ARQUIVO_RESULTADOS}"
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "ARO-App-Backup"
+        }
+
+        sha_atual = None
+        try:
+            req_get = urllib.request.Request(url, headers=headers, method="GET")
+            with urllib.request.urlopen(req_get, timeout=10) as resp:
+                dados_arq = json.loads(resp.read().decode("utf-8"))
+                sha_atual = dados_arq.get("sha")
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                return False, f"Erro HTTP {e.code}"
+
+        payload = {
+            "message": f"Backup automático resultados ARO - {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}",
+            "content": base64.b64encode(conteudo_bytes).decode("utf-8")
+        }
+        if sha_atual:
+            payload["sha"] = sha_atual
+
+        req_put = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="PUT"
+        )
+        with urllib.request.urlopen(req_put, timeout=15) as resp_put:
+            return resp_put.status in, "Salvo na nuvem GitHub"
+    except Exception as ex:
+        return False, str(ex)
+
+def estrutura_vazia_temporada():
+    return {
+        "historico_etapas": pd.DataFrame(columns=["Data", "Espécie", "Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]),
+        "campeonato_geral": pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Pontuação Acumulada"])
+    }
+
+def carregar_resultados_fisicos():
+    ano_padrao = str(datetime.date.today().year)
+    if os.path.exists(ARQUIVO_RESULTADOS):
+        with open(ARQUIVO_RESULTADOS, "rb") as f:
+            dados = pickle.load(f)
+        # Migração automática caso o arquivo ainda esteja no formato antigo (sem divisão por ano)
+        if "temporadas" not in dados:
+            dados_migrados = {
+                "temporada_atual": ano_padrao,
+                "temporadas": {
+                    ano_padrao: {
+                        "historico_etapas": dados.get("historico_etapas", estrutura_vazia_temporada()["historico_etapas"]),
+                        "campeonato_geral": dados.get("campeonato_geral", estrutura_vazia_temporada()["campeonato_geral"])
+                    }
+                }
+            }
+            salvar_resultados_fisicos(dados_migrados)
+            return dados_migrados
+        return dados
+    else:
+        return {
+            "temporada_atual": ano_padrao,
+            "temporadas": {
+                ano_padrao: estrutura_vazia_temporada()
+            }
+        }
+
+def salvar_resultados_fisicos(dados):
+    bytes_pkl = pickle.dumps(dados)
+    with open(ARQUIVO_RESULTADOS, "wb") as f:
+        f.write(bytes_pkl)
+    sucesso_gh, msg_gh = enviar_backup_github(bytes_pkl)
+    st.session_state["ultimo_status_backup"] = (sucesso_gh, msg_gh)
+# =========================================================================================
+# 🎨 FUNÇÃO GERADORA DE IMAGEM PROFISSIONAL (PÓDIO + LOGO ARO + FONTES GRANDES)
+# =========================================================================================
 def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, modo="etapa"):
     import reportlab
     LARGURA = 1200
     qtd_itens = len(df_dados)
-    # Cards mais altos (126px + espaçamento) para acomodar letras grandes e negrito com folga
     ALTURA = max(1450, 560 + (qtd_itens * 144) + 120)
 
     if modo == "geral":
@@ -65,7 +154,6 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
     draw.rectangle([24, 24, LARGURA - 24, ALTURA - 24], outline=COR_DESTAQUE, width=5)
     draw.rectangle([36, 36, LARGURA - 36, ALTURA - 36], outline=(255, 255, 255), width=1)
 
-    # Busca garantida de fonte TrueType com suporte total a acentos (PT-BR) e Negrito
     def carregar_fonte_segura(tamanho, negrito=True):
         rl_dir = os.path.dirname(reportlab.__file__)
         candidatos = [
@@ -74,7 +162,6 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if negrito else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             "arialbd.ttf" if negrito else "arial.ttf",
         ]
-        # Varredura automática caso o servidor use outra pasta de fontes
         if os.path.exists("/usr/share/fonts"):
             for raiz, _, arquivos in os.walk("/usr/share/fonts"):
                 for arq in arquivos:
@@ -92,7 +179,6 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
                     continue
         return ImageFont.load_default(size=tamanho)
 
-    # Tamanhos grandes e em negrito para leitura imediata no celular
     f_clube = carregar_fonte_segura(26, negrito=True)
     f_titulo = carregar_fonte_segura(54, negrito=True)
     f_subtitulo = carregar_fonte_segura(30, negrito=True)
@@ -126,7 +212,6 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
     draw.text((LARGURA // 2, y_cursor), subtitulo_info, font=f_subtitulo, fill=COR_SUAVE, anchor="mm")
     y_cursor += 64
 
-    # Faixa destaque da Espécie
     draw.rounded_rectangle([110, y_cursor - 32, LARGURA - 110, y_cursor + 34], radius=18, fill=COR_DESTAQUE)
     draw.text((LARGURA // 2, y_cursor), f"MODALIDADE: {especie.upper()}", font=f_especie, fill=COR_TEXTO_FAIXA, anchor="mm")
     y_cursor += 82
@@ -183,149 +268,203 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
     img.save(img_buffer, format="PNG", quality=95)
     img_buffer.seek(0)
     return img_buffer
-
-
-# --- CARREGAMENTO FÍSICO DOS DADOS ---
-def carregar_resultados_fisicos():
-    if os.path.exists(ARQUIVO_RESULTADOS):
-        with open(ARQUIVO_RESULTADOS, "rb") as f:
-            return pickle.load(f)
-    else:
-        return {
-            "historico_etapas": pd.DataFrame(columns=["Data", "Espécie", "Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]),
-            "campeonato_geral": pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Pontuação Acumulada"])
-        }
-
-def salvar_resultados_fisicos(dados):
-    with open(ARQUIVO_RESULTADOS, "wb") as f:
-        pickle.dump(dados, f)
-
 if "banco_resultados_viva" not in st.session_state:
     st.session_state["banco_resultados_viva"] = carregar_resultados_fisicos()
 
-dados_resultados = st.session_state["banco_resultados_viva"]
-df_etapas = dados_resultados["historico_etapas"]
+banco_geral = st.session_state["banco_resultados_viva"]
+temporada_ativa = str(banco_geral.get("temporada_atual", str(datetime.date.today().year)))
+todas_temporadas = sorted(list(banco_geral["temporadas"].keys()), reverse=True)
 
 if "lista_lote_resultados" not in st.session_state:
     st.session_state["lista_lote_resultados"] = []
 
-# --- MENU DE OPÇÕES NO TOPO ---
-opcao_tela = st.radio("Selecione a visualização desejada:", ["📅 Resultados por Etapa", "📊 Classificação Geral do Campeonato"], horizontal=True)
+# =========================================================================================
+# 📅 SELETOR DE TEMPORADA (ANO) E MENU PRINCIPAL
+# =========================================================================================
+col_temp, col_vis = st.columns([1, 2])
+with col_temp:
+    ano_selecionado = st.selectbox(
+        "📅 Temporada / Ano:",
+        todas_temporadas,
+        index=todas_temporadas.index(temporada_ativa) if temporada_ativa in todas_temporadas else 0,
+        format_func=lambda a: f"🏆 {a} (Temporada Atual)" if a == temporada_ativa else f"📁 {a} (Encerrada)"
+    )
+
+eh_temporada_ativa = (ano_selecionado == temporada_ativa)
+df_etapas = banco_geral["temporadas"][ano_selecionado]["historico_etapas"]
+
+with col_vis:
+    opcao_tela = st.radio(
+        "Selecione a visualização desejada:",
+        ["📅 Resultados por Etapa", "📊 Classificação Geral do Campeonato"],
+        horizontal=True
+    )
+
+if not eh_temporada_ativa:
+    st.info(f"📁 **Modo Histórico ({ano_selecionado}):** Esta temporada já foi encerrada. Os resultados e rankings estão disponíveis para consulta, PDF e imagem.")
 
 # =========================================================================================
-# ⚙️ PAINEL DE LANÇAMENTO EM LOTE COM COLOCAÇÃO E PONTUAÇÃO LIVRE (MASTER / DIRETORIA)
+# ⚙️ PAINÉIS ADMINISTRATIVOS (LANÇAMENTO, EXCLUSÃO, BACKUP E ENCERRAR TEMPORADA)
 # =========================================================================================
 if is_admin:
     st.write("---")
-    exp_cadastro = st.expander("📝 Painel de Lançamento de Resultados em Lote (Exclusivo Master/Diretoria)")
-    with exp_cadastro:
-        st.markdown("##### 1. Configurações Iniciais da Etapa")
-        c_conf1, c_conf2, c_conf3 = st.columns(3)
-        l_data = c_conf1.date_input("Data da Etapa:", datetime.date.today(), key="l_data_input")
-        l_especie = c_conf2.selectbox("Espécie da Rodada:", especies_validas, key="l_especie_select")
-        pt_maxima = c_conf3.number_input("Pontuação do 1º Colocado:", min_value=1, value=10, step=1)
-        
-        st.write("---")
-        st.markdown("##### 2. Adicionar Aves Classificadas (Sem limite de posições)")
-        
-        with st.form("form_lote_individual_ajustado", clear_on_submit=True):
-            col_r1, col_r2, col_r3 = st.columns(3)
-            num_colocacao = col_r1.number_input("Colocação (Nº):", min_value=1, step=1, value=1)
-            r_proprietario = col_r2.text_input("Proprietário:")
-            r_ave = col_r3.text_input("Nome da Ave:")
+    
+    # 1. LANÇAMENTO EM LOTE (APENAS NA TEMPORADA ATIVA)
+    if eh_temporada_ativa:
+        exp_cadastro = st.expander(f"📝 Painel de Lançamento de Resultados em Lote - Temporada {temporada_ativa}")
+        with exp_cadastro:
+            st.markdown("##### 1. Configurações Iniciais da Etapa")
+            c_conf1, c_conf2, c_conf3 = st.columns(3)
+            l_data = c_conf1.date_input("Data da Etapa:", datetime.date.today(), key="l_data_input")
+            l_especie = c_conf2.selectbox("Espécie da Rodada:", especies_validas, key="l_especie_select")
+            pt_maxima = c_conf3.number_input("Pontuação do 1º Colocado:", min_value=1, value=10, step=1)
             
-            col_r4, col_r5 = st.columns(2)
-            r_anilha = col_r4.text_input("Anilha:")
-            r_cantos = col_r5.number_input("Quantidade de Cantos:", min_value=0, step=1, value=0)
+            st.write("---")
+            st.markdown("##### 2. Adicionar Aves Classificadas (Sem limite de posições)")
             
-            r_pontos = pt_maxima - (num_colocacao - 1)
-            if r_pontos < 0:
-                r_pontos = 0
-            
-            st.caption(f"💡 Esta colocação ({num_colocacao}º Lugar) receberá automaticamente: **{r_pontos} pontos**")
-            
-            if st.form_submit_button("➕ Adicionar à Lista Temporária", use_container_width=True):
-                if not r_proprietario.strip() or not r_ave.strip() or not r_anilha.strip():
-                    st.error("❌ Preencha todos os campos da ave antes de adicionar.")
-                else:
-                    nova_ave_temp = {
-                        "Data": l_data.strftime("%d/%m/%Y"),
-                        "Espécie": l_especie,
-                        "Colocação": f"{num_colocacao}º Lugar",
-                        "Proprietário": r_proprietario.strip().upper(),
-                        "Nome da Ave": r_ave.strip().upper(),
-                        "Anilha": r_anilha.strip().upper(),
-                        "Cantos": int(r_cantos),
-                        "Pontos": int(r_pontos)
-                    }
-                    st.session_state["lista_lote_resultados"].append(nova_ave_temp)
-                    st.success(f"Ave '{r_ave.upper()}' adicionada temporariamente em {num_colocacao}º Lugar!")
+            with st.form("form_lote_individual_ajustado", clear_on_submit=True):
+                col_r1, col_r2, col_r3 = st.columns(3)
+                num_colocacao = col_r1.number_input("Colocação (Nº):", min_value=1, step=1, value=1)
+                r_proprietario = col_r2.text_input("Proprietário:")
+                r_ave = col_r3.text_input("Nome da Ave:")
+                
+                col_r4, col_r5 = st.columns(2)
+                r_anilha = col_r4.text_input("Anilha:")
+                r_cantos = col_r5.number_input("Quantidade de Cantos:", min_value=0, step=1, value=0)
+                
+                r_pontos = max(0, pt_maxima - (num_colocacao - 1))
+                st.caption(f"💡 Esta colocação ({num_colocacao}º Lugar) receberá automaticamente: **{r_pontos} pontos**")
+                
+                if st.form_submit_button("➕ Adicionar à Lista Temporária", use_container_width=True):
+                    if not r_proprietario.strip() or not r_ave.strip() or not r_anilha.strip():
+                        st.error("❌ Preencha todos os campos da ave antes de adicionar.")
+                    else:
+                        nova_ave_temp = {
+                            "Data": l_data.strftime("%d/%m/%Y"),
+                            "Espécie": l_especie,
+                            "Colocação": f"{num_colocacao}º Lugar",
+                            "Proprietário": r_proprietario.strip().upper(),
+                            "Nome da Ave": r_ave.strip().upper(),
+                            "Anilha": r_anilha.strip().upper(),
+                            "Cantos": int(r_cantos),
+                            "Pontos": int(r_pontos)
+                        }
+                        st.session_state["lista_lote_resultados"].append(nova_ave_temp)
+                        st.success(f"Ave '{r_ave.upper()}' adicionada temporariamente em {num_colocacao}º Lugar!")
+                        st.rerun()
+
+            if st.session_state["lista_lote_resultados"]:
+                st.write("")
+                st.markdown(f"**📋 Aves Preparadas para Salvar ({l_especie} - {l_data.strftime('%d/%m/%Y')})**")
+                df_lote_temp = pd.DataFrame(st.session_state["lista_lote_resultados"])
+                st.dataframe(df_lote_temp[["Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]], hide_index=True, use_container_width=True)
+                
+                cb_lote1, cb_lote2 = st.columns(2)
+                if cb_lote1.button("🗑️ Limpar Lista Temporária", use_container_width=True):
+                    st.session_state["lista_lote_resultados"] = []
+                    st.rerun()
+                    
+                if cb_lote2.button("💾 CONFIRMAR E SALVAR ETAPA COMPLETA", use_container_width=True, type="primary"):
+                    st.session_state["banco_resultados_viva"]["temporadas"][temporada_ativa]["historico_etapas"] = pd.concat([df_etapas, df_lote_temp], ignore_index=True)
+                    salvar_resultados_fisicos(st.session_state["banco_resultados_viva"])
+                    st.session_state["lista_lote_resultados"] = []
+                    st.success("🎯 Resultados salvos localmente e enviados para o backup!")
+                    st.rerun()
+        # 2. EXCLUSÃO DE RESULTADOS (TEMPORADA ATIVA)
+        exp_excluir = st.expander(f"🗑️ Excluir Resultados Lançados - Temporada {temporada_ativa}")
+        with exp_excluir:
+            if df_etapas.empty:
+                st.caption("Nenhum resultado salvo nesta temporada para excluir.")
+            else:
+                st.markdown("##### 1. Excluir uma Ave Específica")
+                datas_disp_exc = sorted(df_etapas["Data"].unique(), key=lambda x: datetime.datetime.strptime(x, "%d/%m/%Y"), reverse=True)
+                data_exc_sel = st.selectbox("Selecione a Data da Etapa:", datas_disp_exc, key="sel_data_exc")
+                df_na_data = df_etapas[df_etapas["Data"] == data_exc_sel]
+                
+                opcoes_aves_exc = [
+                    f"[{row['Espécie']}] {row['Colocação']} - {row['Nome da Ave']} (Prop: {row['Proprietário']} | Anilha: {row['Anilha']})"
+                    for _, row in df_na_data.iterrows()
+                ]
+                indices_reais_exc = df_na_data.index.tolist()
+                item_exc_escolhido = st.selectbox("Selecione o resultado que deseja apagar:", opcoes_aves_exc, key="sel_ave_exc")
+                
+                if st.button("🗑️ Excluir Resultado Individual Selecionado", use_container_width=True):
+                    idx_para_apagar = indices_reais_exc[opcoes_aves_exc.index(item_exc_escolhido)]
+                    st.session_state["banco_resultados_viva"]["temporadas"][temporada_ativa]["historico_etapas"] = df_etapas.drop(idx_para_apagar).reset_index(drop=True)
+                    salvar_resultados_fisicos(st.session_state["banco_resultados_viva"])
+                    st.warning("✅ Resultado individual removido! Classificação atualizada.")
                     st.rerun()
 
-        if st.session_state["lista_lote_resultados"]:
-            st.write("")
-            st.markdown(f"**📋 Aves Preparadas para Salvar ({l_especie} - {l_data.strftime('%d/%m/%Y')})**")
-            df_lote_temp = pd.DataFrame(st.session_state["lista_lote_resultados"])
-            st.dataframe(df_lote_temp[["Colocação", "Proprietário", "Nome da Ave", "Anilha", "Cantos", "Pontos"]], hide_index=True, use_container_width=True)
-            
-            cb_lote1, cb_lote2 = st.columns(2)
-            if cb_lote1.button("🗑️ Limpar Lista Temporária", use_container_width=True):
-                st.session_state["lista_lote_resultados"] = []
-                st.rerun()
+                st.write("---")
+                st.markdown("##### 2. Excluir Rodada / Espécie Inteira da Data")
+                especies_na_data = sorted(df_na_data["Espécie"].unique().tolist())
+                esp_exc_lote = st.selectbox("Selecione a Espécie que deseja apagar desta data:", ["TODAS AS ESPÉCIES DESTA DATA"] + especies_na_data, key="sel_esp_exc_lote")
                 
-            if cb_lote2.button("💾 CONFIRMAR E SALVAR ETAPA COMPLETA NO SERVIDOR", use_container_width=True, type="primary"):
-                st.session_state["banco_resultados_viva"]["historico_etapas"] = pd.concat([df_etapas, df_lote_temp], ignore_index=True)
-                salvar_resultados_files = st.session_state["banco_resultados_viva"]
-                salvar_resultados_fisicos(salvar_resultados_files)
-                st.session_state["lista_lote_resultados"] = []
-                st.success("🎯 Todos os resultados da etapa foram consolidados e salvos globalmente com sucesso!")
-                st.rerun()
-                    # =====================================================================================
-    # 🗑️ PAINEL DE EXCLUSÃO DE RESULTADOS (EXCLUSIVO MASTER / DIRETORIA)
-    # =====================================================================================
-    exp_excluir = st.expander("🗑️ Excluir Resultados Lançados (Exclusivo Master/Diretoria)")
-    with exp_excluir:
-        if df_etapas.empty:
-            st.caption("Nenhum resultado salvo no histórico para excluir.")
-        else:
-            st.markdown("##### 1. Excluir uma Ave Específica")
-            datas_disp_exc = sorted(df_etapas["Data"].unique(), key=lambda x: datetime.datetime.strptime(x, "%d/%m/%Y"), reverse=True)
-            data_exc_sel = st.selectbox("Selecione a Data da Etapa:", datas_disp_exc, key="sel_data_exc")
-            
-            df_na_data = df_etapas[df_etapas["Data"] == data_exc_sel]
-            
-            opcoes_aves_exc = [
-                f"[{row['Espécie']}] {row['Colocação']} - {row['Nome da Ave']} (Prop: {row['Proprietário']} | Anilha: {row['Anilha']})"
-                for _, row in df_na_data.iterrows()
-            ]
-            indices_reais_exc = df_na_data.index.tolist()
-            
-            item_exc_escolhido = st.selectbox("Selecione o resultado que deseja apagar:", opcoes_aves_exc, key="sel_ave_exc")
-            
-            if st.button("🗑️ Excluir Resultado Individual Selecionado", use_container_width=True):
-                idx_para_apagar = indices_reais_exc[opcoes_aves_exc.index(item_exc_escolhido)]
-                st.session_state["banco_resultados_viva"]["historico_etapas"] = df_etapas.drop(idx_para_apagar).reset_index(drop=True)
-                salvar_resultados_fisicos(st.session_state["banco_resultados_viva"])
-                st.warning("✅ Resultado individual removido com sucesso! A Classificação Geral foi atualizada.")
-                st.rerun()
+                if st.checkbox(f"Confirmar exclusão definitiva dos registros de {data_exc_sel}", key="chk_confirma_exc_lote"):
+                    if st.button("💥 APAGAR RESULTADOS EM LOTE", use_container_width=True, type="primary"):
+                        if esp_exc_lote == "TODAS AS ESPÉCIES DESTA DATA":
+                            novo_df = df_etapas[df_etapas["Data"] != data_exc_sel].reset_index(drop=True)
+                        else:
+                            novo_df = df_etapas[~((df_etapas["Data"] == data_exc_sel) & (df_etapas["Espécie"] == esp_exc_lote))].reset_index(drop=True)
+                        st.session_state["banco_resultados_viva"]["temporadas"][temporada_ativa]["historico_etapas"] = novo_df
+                        salvar_resultados_fisicos(st.session_state["banco_resultados_viva"])
+                        st.success("🗑️ Registros excluídos com sucesso!")
+                        st.rerun()
+
+    # 3. COFRE DE SEGURANÇA (BACKUP MANUAL + ENCERRAR TEMPORADA - EXCLUSIVO MASTER)
+    if is_master:
+        exp_cofre = st.expander("🛡️ Cofre de Backup e Gestão de Temporada Anual (Exclusivo Master)")
+        with exp_cofre:
+            if "ultimo_status_backup" in st.session_state:
+                ok_gh, msg_gh = st.session_state["ultimo_status_backup"]
+                if ok_gh:
+                    st.success(f"☁️ Backup Nuvem GitHub: Ativo ({msg_gh})")
+                else:
+                    st.warning(f"⚠️ Backup Nuvem GitHub: {msg_gh} (Usando cópia local + download manual)")
+
+            cb_bkp1, cb_bkp2 = st.columns(2)
+            with cb_bkp1:
+                st.markdown("##### 📥 Baixar Cópia de Segurança")
+                bytes_atuais = pickle.dumps(st.session_state["banco_resultados_viva"])
+                st.download_button(
+                    label="💾 Baixar Arquivo de Backup Completo (.pkl)",
+                    data=bytes_atuais,
+                    file_name=f"backup_resultados_aro_{datetime.date.today().strftime('%d_%m_%Y')}.pkl",
+                    mime="application/octet-stream",
+                    use_container_width=True
+                )
+            with cb_bkp2:
+                st.markdown("##### 📤 Restaurar Backup Salvo")
+                arq_subido = st.file_uploader("Enviar arquivo .pkl salvo anteriormente:", type=["pkl"], key="up_bkp_res")
+                if arq_subido is not None:
+                    if st.button("🔄 Restaurar Dados deste Arquivo", use_container_width=True, type="primary"):
+                        try:
+                            dados_restaurados = pickle.loads(arq_subido.read())
+                            st.session_state["banco_resultados_viva"] = dados_restaurados
+                            salvar_resultados_fisicos(dados_restaurados)
+                            st.success("✅ Backup restaurado com sucesso!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Arquivo inválido: {e}")
 
             st.write("---")
-            st.markdown("##### 2. Excluir Rodada / Espécie Inteira da Data")
-            especies_na_data = sorted(df_na_data["Espécie"].unique().tolist())
-            esp_exc_lote = st.selectbox("Selecione a Espécie que deseja apagar desta data:", ["TODAS AS ESPÉCIES DESTA DATA"] + especies_na_data, key="sel_esp_exc_lote")
+            st.markdown(f"##### 🏁 Encerrar Temporada {temporada_ativa} e Iniciar Novo Ano")
+            st.caption("Ao encerrar, todos os dados da temporada atual ficam salvos no histórico para consulta por ano, e uma nova temporada zerada é aberta.")
+            proximo_ano_sugerido = str(int(temporada_ativa) + 1) if temporada_ativa.isdigit() else str(datetime.date.today().year + 1)
+            novo_ano_input = st.text_input("Nome / Ano da Nova Temporada:", value=proximo_ano_sugerido, key="input_novo_ano")
             
-            if st.checkbox(f"Confirmar que desejo apagar definitivamente os registros selecionados de {data_exc_sel}", key="chk_confirma_exc_lote"):
-                if st.button("💥 APAGAR RESULTADOS EM LOTE", use_container_width=True, type="primary"):
-                    if esp_exc_lote == "TODAS AS ESPÉCIES DESTA DATA":
-                        novo_df = df_etapas[df_etapas["Data"] != data_exc_sel].reset_index(drop=True)
+            if st.checkbox(f"Confirmo que desejo encerrar a temporada {temporada_ativa} e abrir {novo_ano_input}", key="chk_encerrar_temp"):
+                if st.button("🚀 ENCERRAR TEMPORADA ATUAL E ABRIR NOVA", use_container_width=True, type="primary"):
+                    novo_ano_limpo = novo_ano_input.strip()
+                    if not novo_ano_limpo:
+                        st.error("Digite o ano da nova temporada.")
                     else:
-                        novo_df = df_etapas[~((df_etapas["Data"] == data_exc_sel) & (df_etapas["Espécie"] == esp_exc_lote))].reset_index(drop=True)
-                    
-                    st.session_state["banco_resultados_viva"]["historico_etapas"] = novo_df
-                    salvar_resultados_fisicos(st.session_state["banco_resultados_viva"])
-                    st.success("🗑️ Registros excluídos com sucesso!")
-                    st.rerun()
-
+                        if novo_ano_limpo not in st.session_state["banco_resultados_viva"]["temporadas"]:
+                            st.session_state["banco_resultados_viva"]["temporadas"][novo_ano_limpo] = estrutura_vazia_temporada()
+                        st.session_state["banco_resultados_viva"]["temporada_atual"] = novo_ano_limpo
+                        salvar_resultados_fisicos(st.session_state["banco_resultados_viva"])
+                        st.success(f"🎉 Temporada {temporada_ativa} arquivada no histórico e Temporada {novo_ano_limpo} iniciada!")
+                        st.rerun()
 # =========================================================================================
 # 📊 EXIBIÇÃO DOS DADOS: VISÍVEL PARA MASTER, DIRETORIA, SÓCIOS E VISITANTES
 # =========================================================================================
@@ -333,10 +472,10 @@ st.write("")
 
 # --- TELA 1: RESULTADOS POR ETAPA (FILTRADO POR DATA E COM EMISSÃO DE PDF E IMAGEM) ---
 if opcao_tela == "📅 Resultados por Etapa":
-    st.markdown("### 📅 Histórico de Etapas Realizadas")
+    st.markdown(f"### 📅 Histórico de Etapas Realizadas ({ano_selecionado})")
     
     if df_etapas.empty:
-        st.info("💡 Nenhuma etapa ou resultado foi lançado no campeonato ainda.")
+        st.info(f"💡 Nenhuma etapa ou resultado foi lançado na temporada {ano_selecionado} ainda.")
     else:
         lista_datas = sorted(df_etapas["Data"].unique(), key=lambda x: datetime.datetime.strptime(x, "%d/%m/%Y"), reverse=True)
         data_sel = st.selectbox("Selecione a data da etapa que deseja consultar:", lista_datas)
@@ -363,9 +502,8 @@ if opcao_tela == "📅 Resultados por Etapa":
                     st.write("")
                     col_btn_pdf, col_btn_img = st.columns(2)
                     
-                    # --- BOTÃO 1: GERADOR DE RELATÓRIO PDF DESIGNER COM LOGO ---
                     with col_btn_pdf:
-                        if st.button(f"📄 Salvar Relatório Oficial em PDF", key=f"pdf_{esp_nome}_{data_sel}", use_container_width=True):
+                        if st.button(f"📄 Salvar Relatório Oficial em PDF", key=f"pdf_{ano_selecionado}_{esp_nome}_{data_sel}", use_container_width=True):
                             pdf_buffer = io.BytesIO()
                             p = canvas.Canvas(pdf_buffer, pagesize=A4)
                             largura_f, altura_f = A4
@@ -388,7 +526,7 @@ if opcao_tela == "📅 Resultados por Etapa":
                             p.setFont("Helvetica-Bold", 13)
                             p.drawString(margem_x + texto_offset_x, y_pos - 0.7*cm, "ARO - ASSOCIAÇÃO RIO DO SUL DE ORNITOLOGIA")
                             p.setFont("Helvetica", 9)
-                            p.drawString(margem_x + texto_offset_x, y_pos - 1.3*cm, f"RELATÓRIO DE RESULTADOS OFICIAIS  |  ETAPA: {data_sel}  |  CATEGORIA: {esp_nome.upper()}")
+                            p.drawString(margem_x + texto_offset_x, y_pos - 1.3*cm, f"TEMPORADA {ano_selecionado}  |  ETAPA: {data_sel}  |  CATEGORIA: {esp_nome.upper()}")
                             
                             y_pos -= 2.6 * cm
                             
@@ -405,7 +543,6 @@ if opcao_tela == "📅 Resultados por Etapa":
                             p.drawString(margem_x + 16.9*cm, y_pos - 0.4*cm, "PONTOS")
                             
                             y_pos -= 0.6 * cm
-                            
                             cor_alternada = False
                             p.setFont("Helvetica", 9)
                             
@@ -413,18 +550,15 @@ if opcao_tela == "📅 Resultados por Etapa":
                                 if y_pos < 2.0 * cm:
                                     p.showPage()
                                     y_pos = altura_f - 2.0 * cm
-                                    
                                 if cor_alternada:
                                     p.setFillColor(colors.HexColor("#F9FAFB"))
                                     p.rect(margem_x, y_pos - 0.55*cm, largura_f - 2*margem_x, 0.55*cm, fill=True, stroke=False)
-                                    
                                 p.setFillColor(colors.HexColor("#1F2937"))
                                 p.drawString(margem_x + 0.2*cm, y_pos - 0.4*cm, str(row["Colocação"]))
                                 p.drawString(margem_x + 2.8*cm, y_pos - 0.4*cm, str(row["Proprietário"])[:28])
                                 p.drawString(margem_x + 8.2*cm, y_pos - 0.4*cm, str(row["Nome da Ave"])[:18])
                                 p.drawString(margem_x + 12.2*cm, y_pos - 0.4*cm, str(row["Anilha"])[:14])
                                 p.drawString(margem_x + 15.2*cm, y_pos - 0.4*cm, str(int(row["Cantos"])))
-                                
                                 p.setFont("Helvetica-Bold", 9)
                                 pontos_valor = int(row['Pontos'])
                                 if pontos_valor > 0:
@@ -434,35 +568,31 @@ if opcao_tela == "📅 Resultados por Etapa":
                                     p.setFillColor(colors.HexColor("#9CA3AF"))
                                     p.drawString(margem_x + 16.9*cm, y_pos - 0.4*cm, "0 pts")
                                 p.setFont("Helvetica", 9)
-                                
                                 p.setLineWidth(0.3)
                                 p.setStrokeColor(colors.HexColor("#E5E7EB"))
                                 p.line(margem_x, y_pos - 0.55*cm, largura_f - margem_x, y_pos - 0.55*cm)
-                                
                                 y_pos -= 0.55 * cm
                                 cor_alternada = not cor_alternada
                             
                             p.setFont("Helvetica-Oblique", 8)
                             p.setFillColor(colors.HexColor("#6B7280"))
-                            p.drawString(margem_x, 1.0*cm, f"Documento oficial emitido pelo sistema ARO em {datetime.date.today().strftime('%d/%m/%Y')} - Cópia Digital Segura")
-                            
+                            p.drawString(margem_x, 1.0*cm, f"Documento oficial emitido pelo sistema ARO em {datetime.date.today().strftime('%d/%m/%Y')} - Temporada {ano_selecionado}")
                             p.save()
                             pdf_buffer.seek(0)
                             
                             st.download_button(
                                 label=f"📥 Baixar Relatório PDF - {esp_nome}",
                                 data=pdf_buffer,
-                                file_name=f"resultado_{esp_nome.lower().replace(' ', '_')}_{data_sel.replace('/', '_')}.pdf",
+                                file_name=f"resultado_{ano_selecionado}_{esp_nome.lower().replace(' ', '_')}_{data_sel.replace('/', '_')}.pdf",
                                 mime="application/pdf",
                                 use_container_width=True,
-                                key=f"dl_btn_pdf_{esp_nome}_{data_sel}"
+                                key=f"dl_btn_pdf_{ano_selecionado}_{esp_nome}_{data_sel}"
                             )
-                    # --- BOTÃO 2: GERADOR DE IMAGEM OFICIAL (PÓDIO + LOGO) ---
                     with col_btn_img:
-                        if st.button(f"🖼️ Gerar Imagem Oficial (WhatsApp/Insta)", key=f"img_etapa_{esp_nome}_{data_sel}", use_container_width=True):
+                        if st.button(f"🖼️ Gerar Imagem Oficial (WhatsApp/Insta)", key=f"img_etapa_{ano_selecionado}_{esp_nome}_{data_sel}", use_container_width=True):
                             img_etapa_buf = gerar_imagem_oficial_aro(
                                 titulo_banner="RESULTADO OFICIAL DA ETAPA",
-                                subtitulo_info=f"Data da Etapa: {data_sel}",
+                                subtitulo_info=f"Temporada {ano_selecionado} • Data: {data_sel}",
                                 especie=esp_nome,
                                 df_dados=df_res_esp,
                                 modo="etapa"
@@ -471,19 +601,19 @@ if opcao_tela == "📅 Resultados por Etapa":
                             st.download_button(
                                 label=f"📥 Baixar Imagem PNG - {esp_nome}",
                                 data=img_etapa_buf,
-                                file_name=f"arte_resultado_{esp_nome.lower().replace(' ', '_')}_{data_sel.replace('/', '_')}.png",
+                                file_name=f"arte_resultado_{ano_selecionado}_{esp_nome.lower().replace(' ', '_')}_{data_sel.replace('/', '_')}.png",
                                 mime="image/png",
                                 use_container_width=True,
-                                key=f"dl_btn_img_{esp_nome}_{data_sel}"
+                                key=f"dl_btn_img_{ano_selecionado}_{esp_nome}_{data_sel}"
                             )
 
-# --- TELA 2: CLASSIFICAÇÃO GERAL ACUMULADA DO CAMPEONATO (SOMA AUTOMÁTICA + IMAGEM) ---
+# --- TELA 2: CLASSIFICAÇÃO GERAL ACUMULADA DO CAMPEONATO ---
 else:
-    st.markdown("### 📊 Classificação Geral do Campeonato Acumulado")
-    st.caption("🏆 O ranking abaixo calcula e soma automaticamente todos os pontos conquistados pelas aves em cada etapa realizada.")
+    st.markdown(f"### 📊 Classificação Geral do Campeonato ({ano_selecionado})")
+    st.caption("🏆 O ranking abaixo calcula e soma automaticamente todos os pontos conquistados pelas aves na temporada selecionada.")
     
     if df_etapas.empty:
-        st.info("💡 A classificação geral aparecerá assim que os primeiros resultados por etapa forem lançados.")
+        st.info(f"💡 A classificação geral de {ano_selecionado} aparecerá assim que os primeiros resultados forem lançados.")
     else:
         df_ranking = df_etapas.groupby(["Anilha", "Nome da Ave", "Proprietário", "Espécie"])["Pontos"].sum().reset_index()
         df_ranking = df_ranking.rename(columns={"Pontos": "Pontuação Acumulada"})
@@ -494,7 +624,7 @@ else:
                 df_rank_esp = df_ranking[df_ranking["Espécie"] == esp_nome].copy()
                 
                 if df_rank_esp.empty:
-                    st.caption(f"Nenhuma ave da espécie {esp_nome} pontuou no campeonato até o momento.")
+                    st.caption(f"Nenhuma ave da espécie {esp_nome} pontuou nesta temporada.")
                 else:
                     df_rank_esp = df_rank_esp.sort_values(by="Pontuação Acumulada", ascending=False).reset_index(drop=True)
                     df_rank_esp.insert(0, "Posição", [f"{idx + 1}º Lugar" for idx in range(len(df_rank_esp))])
@@ -506,21 +636,20 @@ else:
                     )
                     
                     st.write("")
-                    if st.button(f"🏆 Gerar Imagem da Classificação Geral ({esp_nome})", key=f"img_geral_{esp_nome}", use_container_width=True):
-                        ano_atual = datetime.date.today().year
+                    if st.button(f"🏆 Gerar Imagem da Classificação Geral ({esp_nome})", key=f"img_geral_{ano_selecionado}_{esp_nome}", use_container_width=True):
                         img_geral_buf = gerar_imagem_oficial_aro(
                             titulo_banner="CLASSIFICAÇÃO GERAL",
-                            subtitulo_info=f"Ranking Oficial Acumulado • Temporada {ano_atual}",
+                            subtitulo_info=f"Ranking Oficial Acumulado • Temporada {ano_selecionado}",
                             especie=esp_nome,
                             df_dados=df_rank_esp,
                             modo="geral"
                         )
-                        st.image(img_geral_buf, caption=f"Ranking Geral Oficial - {esp_nome}", use_container_width=True)
+                        st.image(img_geral_buf, caption=f"Ranking Geral Oficial - {esp_nome} ({ano_selecionado})", use_container_width=True)
                         st.download_button(
                             label=f"📥 Baixar Imagem Ranking Geral - {esp_nome}",
                             data=img_geral_buf,
-                            file_name=f"classificacao_geral_{esp_nome.lower().replace(' ', '_')}_{ano_atual}.png",
+                            file_name=f"classificacao_geral_{ano_selecionado}_{esp_nome.lower().replace(' ', '_')}.png",
                             mime="image/png",
                             use_container_width=True,
-                            key=f"dl_btn_geral_{esp_nome}"
+                            key=f"dl_btn_geral_{ano_selecionado}_{esp_nome}"
                         )
