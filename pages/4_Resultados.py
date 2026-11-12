@@ -66,7 +66,8 @@ def enviar_backup_github(conteudo_bytes):
             method="PUT"
         )
         with urllib.request.urlopen(req_put, timeout=15) as resp_put:
-            return resp_put.status in, "Salvo na nuvem GitHub"
+             return resp_put.status in (200, 201), "Salvo na nuvem GitHub"
+
     except Exception as ex:
         return False, str(ex)
 
@@ -281,7 +282,8 @@ if "lista_lote_resultados" not in st.session_state:
 # =========================================================================================
 # 📅 SELETOR DE TEMPORADA (ANO) E MENU PRINCIPAL
 # =========================================================================================
-col_temp, col_vis = st.columns([1, 2])
+col_temp, col_vis = st.columns((1, 2))
+
 with col_temp:
     ano_selecionado = st.selectbox(
         "📅 Temporada / Ano:",
