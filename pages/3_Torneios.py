@@ -56,15 +56,14 @@ else:
 
 df_inscritos_atual = st.session_state["dados_torneios_internos"]
 df_pendentes_atual = st.session_state["inscricoes_pendentes_aro"]
+
 # =========================================================================================
-# =========================================================================================
-# 🌐 ÁREA DO VISITANTE: ESTATÍSTICAS ESPELHADAS + FORMULÁRIO + CONSULTA DE COMPETIDORES
+# 🌐 ÁREA DO VISITANTE: ESTATÍSTICAS + SOLICITAR INSCRIÇÃO + CONSULTA DE COMPETIDORES
 # =========================================================================================
 if role_atual == "visitante":
     if torneio_data is None:
         st.warning("⚠️ Nenhum torneio cadastrado no momento.")
     else:
-        # --- BLOCO IDENTICO AO SEU MASTER DE ESTATÍSTICAS ---
         st.markdown("### 📊 Estatísticas (Confirmadas)")
         contagem = {esp: len(df_inscritos_atual[df_inscritos_atual["Espécie"] == esp]) if not df_inscritos_atual.empty else 0 for esp in especies_validas}
         cols = st.columns(6)
@@ -77,7 +76,6 @@ if role_atual == "visitante":
 
         st.write("---")
         
-        # 1. TELA DE SUCESSO EM DESTAQUE (SE ACABOU DE ENVIAR)
         if st.session_state["sucesso_inscricao_visitante"]:
             st.markdown("<br>", unsafe_allow_html=True)
             st.success("### 🎉 INSCRIÇÃO SOLICITADA COM SUCESSO!")
@@ -95,24 +93,32 @@ if role_atual == "visitante":
                 unsafe_allow_html=True
             )
             st.balloons()
-            if st.button("➕ Realizar Outra Inscrição Avulsa", use_container_width=True, type="primary"):
+            if st.button("➕ Realizar Outra Inscrição", use_container_width=True, type="primary"):
                 st.session_state["sucesso_inscricao_visitante"] = False
                 st.rerun()
                 
         else:
-            # 2. FORMULÁRIO DE INSCRIÇÃO PARA NÃO-SÓCIO
-            st.markdown("### 📝 inscrição para não socio")
+            st.markdown("### 📝 Solicitar Inscrição")
+            # Seletor reativo fora do form para atualizar o valor (25 ou 35) na hora do clique
+            v_categoria_socio = st.radio(
+                "Selecione sua categoria:",
+                ["Sócio ARO", "Não Sócio"],
+                horizontal=True,
+                key="v_cat_socio_radio"
+            )
+            valor_calc_v = 25.0 if v_categoria_socio == "Sócio ARO" else 35.0
+            clube_calc_v = "ARO" if v_categoria_socio == "Sócio ARO" else "Outro"
+
             with st.form("form_solicitacao_visitante_visual", clear_on_submit=True):
-                v_proprietario = st.text_input("Proprietario:")
+                v_proprietario = st.text_input("Proprietário:")
                 v_ave = st.text_input("Ave:")
                 v_especie = st.selectbox("Espécie:", especies_validas)
                 v_anilha = st.text_input("Anilha:")
-                v_clube = st.text_input("Clube:")
                 
-                st.markdown("**Valor da Inscrição (Não-Sócio):** `R$ 35,00`")
+                st.markdown(f"**Valor da Inscrição ({v_categoria_socio}):** `R$ {valor_calc_v:.2f}`".replace(".", ","))
                 
                 if st.form_submit_button("Solicitar Inscrição", use_container_width=True):
-                    if not v_proprietario.strip() or not v_ave.strip() or not v_anilha.strip() or not v_clube.strip():
+                    if not v_proprietario.strip() or not v_ave.strip() or not v_anilha.strip():
                         st.error("❌ Por favor, preencha todos os campos do formulário antes de enviar.")
                     else:
                         nova_solicitacao_v = pd.DataFrame([{
@@ -120,14 +126,13 @@ if role_atual == "visitante":
                             "Nome da Ave": v_ave.strip(),
                             "Espécie": v_especie,
                             "Anilha": v_anilha.strip(),
-                            "Valor": 35.0,
-                            "Clube": v_clube.strip()
+                            "Valor": valor_calc_v,
+                            "Clube": clube_calc_v
                         }])
                         st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_solicitacao_v], ignore_index=True)
                         salvar_dados_fisicos()
                         st.session_state["sucesso_inscricao_visitante"] = True
                         st.rerun()
-
         # 3. TABELA DE CONSULTA DE ESTACAS PARA O VISITANTE
         st.write("---")
         st.markdown("### 🏆 Competidores Confirmados por Categoria")
@@ -142,61 +147,58 @@ if role_atual == "visitante":
                     df_f = df_f.sort_values(by="Estaca").reset_index(drop=True)
                     st.dataframe(df_f[["Estaca", "Proprietário", "Nome da Ave", "Anilha", "Clube"]], hide_index=True, use_container_width=True)
                     
-    st.stop()  # 🛑 TRAVA DO VISITANTE: Protege os painéis administrativos do Master/Diretoria abaixo
+    st.stop()  # 🛑 TRAVA DO VISITANTE: Protege os painéis administrativos abaixo
 
 
+# =========================================================================================
+# 🔐 ÁREA LOGADA (SÓCIOS, DIRETORIA E MASTER)
+# =========================================================================================
 if torneio_data is not None:
     st.markdown("### 📊 Estatísticas (Confirmadas)")
     contagem = {esp: len(df_inscritos_atual[df_inscritos_atual["Espécie"] == esp]) if not df_inscritos_atual.empty else 0 for esp in especies_validas}
     cols = st.columns(6)
     for i, esp in enumerate(especies_validas): cols[i].metric(label=esp, value=str(contagem[esp]))
     st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
-    # =========================================================================================
-      # =========================================================================================
-    # 🦅 EXCLUSIVO MASTER: GERAR IMAGEM DAS ESTATÍSTICAS PARA WHATSAPP (SEM MATPLOTLIB)
-    # =========================================================================================
+
+    # 🦅 EXCLUSIVO MASTER: GERAR IMAGEM DAS ESTATÍSTICAS PARA WHATSAPP (FONTES GRANDES E ACENTOS CORRIGIDOS)
     if role_atual == "master":
         if st.button("📸 Gerar Imagem das Estatísticas (para WhatsApp)", use_container_width=True):
             from PIL import Image, ImageDraw, ImageFont
+            import reportlab
             
-            # Dados reais do momento
             dados_whats = {esp: len(df_inscritos_atual[df_inscritos_atual["Espécie"] == esp]) if not df_inscritos_atual.empty else 0 for esp in especies_validas}
             total_gaiolas_whats = sum(dados_whats.values())
             
-            # Cria imagem em alta definição (Fundo Branco)
-            img_w, img_h = 600, 550
+            img_w, img_h = 800, 720
             imagem_stats = Image.new("RGB", (img_w, img_h), "#FFFFFF")
             draw = ImageDraw.Draw(imagem_stats)
+            draw.rectangle([(10, 10), (img_w - 10, img_h - 10)], outline="#1E3A8A", width=4)
             
-            # Desenha borda externa preta
-            draw.rectangle([(0, 0), (img_w - 1, img_h - 1)], outline="black", width=3)
+            rl_dir = os.path.dirname(reportlab.__file__)
+            fonte_bold = os.path.join(rl_dir, "fonts", "VeraBd.ttf")
+            f_titulo = ImageFont.truetype(fonte_bold, 34) if os.path.exists(fonte_bold) else ImageFont.load_default()
+            f_sub = ImageFont.truetype(fonte_bold, 24) if os.path.exists(fonte_bold) else ImageFont.load_default()
+            f_item = ImageFont.truetype(fonte_bold, 26) if os.path.exists(fonte_bold) else ImageFont.load_default()
             
-            # Carrega fontes padrão do sistema
-            font_padrao = ImageFont.load_default()
+            draw.text((img_w // 2, 50), "ARO RIO DO SUL", fill="#1E3A8A", font=f_titulo, anchor="mm")
+            draw.text((img_w // 2, 95), f"Estatísticas Confirmadas • {torneio_data.strftime('%d/%m/%Y')}", fill="#374151", font=f_sub, anchor="mm")
+            draw.line([(45, 130), (img_w - 45, 130)], fill="#1E3A8A", width=2)
             
-            # Título e Subtítulo
-            draw.text((img_w // 2, 40), "ARO RIO DO SUL", fill="#1E3A8A", font=font_padrao, anchor="mm")
-            draw.text((img_w // 2, 75), "Estatisticas (Confirmadas)", fill="#262626", font=font_padrao, anchor="mm")
-            draw.line([(40, 100), (img_w - 40, 100)], fill="black", width=1)
-            
-            # Lista as espécies e quantidades
-            y_posicao = 140
+            y_posicao = 175
             for esp, qtd in dados_whats.items():
-                draw.text((60, y_posicao), f"{esp}", fill="#4B5563", font=font_padrao)
-                draw.text((img_w - 60, y_posicao), f"{qtd}", fill="black", font=font_padrao, anchor="ra")
-                draw.line([(60, y_posicao + 25), (img_w - 60, y_posicao + 25)], fill="#E5E7EB", width=1)
-                y_posicao += 45
+                draw.text((65, y_posicao), f"{esp.upper()}", fill="#1F2937", font=f_item, anchor="lm")
+                draw.text((img_w - 65, y_posicao), f"{qtd}", fill="#1E3A8A", font=f_item, anchor="rm")
+                draw.line([(65, y_posicao + 30), (img_w - 65, y_posicao + 30)], fill="#E5E7EB", width=2)
+                y_posicao += 60
                 
-            # Totalizador Geral no Rodapé
-            draw.line([(40, 440), (img_w - 40, 440)], fill="black", width=1)
-            draw.rectangle([(40, 465), (img_w - 40, 515)], fill="#EBF5FF", outline="#3B82F6", width=1)
-            draw.text((img_w // 2, 490), f"TOTAL DE GAIOLAS CONFIRMADAS: {total_gaiolas_whats}", fill="#1E3A8A", font=font_padrao, anchor="mm")
+            draw.rectangle([(45, 570), (img_w - 45, 655)], fill="#EBF5FF", outline="#3B82F6", width=2)
+            draw.text((img_w // 2, 612), f"TOTAL DE GAIOLAS CONFIRMADAS: {total_gaiolas_whats}", fill="#1E3A8A", font=f_item, anchor="mm")
             
-            # Converte para buffer de memória para o download
             buf_whats = io.BytesIO()
             imagem_stats.save(buf_whats, format="PNG")
             buf_whats.seek(0)
             
+            st.image(buf_whats, width=380)
             st.download_button(
                 label="📥 Baixar Imagem das Estatísticas para o Celular / PC",
                 data=buf_whats,
@@ -205,8 +207,6 @@ if torneio_data is not None:
                 use_container_width=True,
                 type="primary"
             )
-
-
 if is_admin and torneio_data is not None:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
@@ -216,7 +216,7 @@ if is_admin and torneio_data is not None:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
                 c_inf, c_b1, c_b2 = st.columns([4, 1, 1])
-                c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']}")
+                c_inf.write(f"👤 **{row['Proprietário']}** | 🦜 {row['Nome da Ave']} ({row['Espécie']}) | 🏷️ {row['Anilha']} | 🏛️ {row.get('Clube', 'Outro')}")
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
                     ocupadas = []
                     if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
@@ -234,6 +234,7 @@ if is_admin and torneio_data is not None:
                     st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
                     salvar_dados_fisicos()
                     st.warning("Recusada!"); st.rerun()
+
 if torneio_data is not None:
     st.write("---")
     st.markdown("### 📋 Minhas Inscrições")
@@ -247,23 +248,45 @@ if torneio_data is not None:
     if len(lista_status) == 0: st.caption("Você não possui nenhuma ave cadastrada neste torneio.")
     else: st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
+    # =========================================================================================
+    # 📝 NOVO FORMULÁRIO SIMPLIFICADO PARA SÓCIOS / LOGADOS (SEM DEPENDER DO PLANTEL)
+    # =========================================================================================
     st.write("---")
-    st.markdown("### 📝 Solicitar Inscrição de Ave")
-    df_plantel = st.session_state.get("dados_aves_sistema", pd.DataFrame())
-    df_disp = df_plantel if is_admin else (df_plantel[df_plantel["Proprietário"] == socio_vinculado] if not df_plantel.empty else pd.DataFrame())
-    if df_disp.empty: st.warning("⚠️ Nenhuma ave cadastrada no seu plantel.")
-    else:
-        with st.form("form_sol_insc", clear_on_submit=False):
-            lista_opcoes = [f"{r['Nome da Ave']} ({r['Espécie']}) - Anilha: {r['Anilha']} | Dono: {r['Proprietário']}" for _, r in df_disp.iterrows()]
-            ave_sel = st.selectbox("Selecione a Ave:", lista_opcoes)
-            is_socio_clube = st.selectbox("Sócio da ARO?", ["Sim", "Não"])
-            if st.form_submit_button("Enviar Solicitação", use_container_width=True):
-                ave_obj = df_disp.iloc[lista_opcoes.index(ave_sel)]
-                nova_s = pd.DataFrame([{"Proprietário": ave_obj["Proprietário"], "Nome da Ave": ave_obj["Nome da Ave"], "Espécie": ave_obj["Espécie"], "Anilha": ave_obj["Anilha"], "Valor": 25.0 if is_socio_clube == "Sim" else 35.0, "Clube": "ARO" if is_socio_clube == "Sim" else "Outro"}])
-                st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
-                salvar_dados_fisicos()
-                st.success("🎯 Solicitado com sucesso!"); st.rerun()
+    st.markdown("### 📝 Solicitar Inscrição")
+    
+    if "sucesso_inscricao_socio" not in st.session_state:
+        st.session_state["sucesso_inscricao_socio"] = False
 
+    if st.session_state["sucesso_inscricao_socio"]:
+        st.success("🎯 Solicitação enviada com sucesso! Aguarde a aprovação da diretoria.")
+        if st.button("➕ Solicitar Outra Inscrição", use_container_width=True, type="primary"):
+            st.session_state["sucesso_inscricao_socio"] = False
+            st.rerun()
+    else:
+        with st.form("form_sol_insc_simplificado", clear_on_submit=True):
+            s_proprietario = st.text_input("Nome do Proprietário:", value="" if is_admin else str(socio_vinculado))
+            s_ave = st.text_input("Nome da Ave:")
+            s_especie = st.selectbox("Espécie:", especies_validas)
+            s_anilha = st.text_input("Número da Anilha:")
+            
+            st.text_input("Categoria / Clube:", value="Sócio ARO (R$ 25,00)", disabled=True)
+            
+            if st.form_submit_button("Solicitar Inscrição", use_container_width=True):
+                if not s_proprietario.strip() or not s_ave.strip() or not s_anilha.strip():
+                    st.error("❌ Por favor, preencha todos os campos antes de enviar.")
+                else:
+                    nova_s = pd.DataFrame([{
+                        "Proprietário": s_proprietario.strip(),
+                        "Nome da Ave": s_ave.strip(),
+                        "Espécie": s_especie,
+                        "Anilha": s_anilha.strip(),
+                        "Valor": 25.0,
+                        "Clube": "ARO"
+                    }])
+                    st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
+                    salvar_dados_fisicos()
+                    st.session_state["sucesso_inscricao_socio"] = True
+                    st.rerun()
     st.write("---")
     st.markdown("### 🏆 Competidores Confirmados por Categoria")
     abas = st.tabs(especies_validas)
@@ -357,8 +380,10 @@ if role_atual == "master":
             st.write("---")
             st.markdown("### 🗑️ Cancelamento Manual Individual")
             opc_lista = [f"[{r['Espécie']}] Estaca {r['Estaca']} - {r['Nome da Ave']} ({r['Proprietário']})" for _, r in df_inscritos_atual.iterrows()]
-            ave_remover = st.selectbox("Escolha uma ave para deletar:", opc_lista)
-            if st.checkbox("Confirmo a exclusão desta ave isolada"):
-                if st.button("❌ Excluir Ave Selecionada", use_container_width=True):
-                    st.session_state["dados_torneios_internos"] = df_inscritos_atual.drop(df_inscritos_atual.index[opc_lista.index(ave_remover)]).reset_index(drop=True)
-                    salvar_dados_fisicos(); st.success("Ave removida!"); st.rerun()
+            sel_cancelar = st.selectbox("Selecione a inscrição que deseja remover:", opc_lista)
+            if st.button("🗑️ Remover Inscrição Selecionada", use_container_width=True):
+                idx_remover = opc_lista.index(sel_cancelar)
+                st.session_state["dados_torneios_internos"] = df_inscritos_atual.drop(idx_remover).reset_index(drop=True)
+                salvar_dados_fisicos()
+                st.warning("Inscrição removida com sucesso!")
+                st.rerun()
