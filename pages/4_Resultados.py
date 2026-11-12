@@ -280,6 +280,52 @@ if is_admin:
                 st.session_state["lista_lote_resultados"] = []
                 st.success("🎯 Todos os resultados da etapa foram consolidados e salvos globalmente com sucesso!")
                 st.rerun()
+                    # =====================================================================================
+    # 🗑️ PAINEL DE EXCLUSÃO DE RESULTADOS (EXCLUSIVO MASTER / DIRETORIA)
+    # =====================================================================================
+    exp_excluir = st.expander("🗑️ Excluir Resultados Lançados (Exclusivo Master/Diretoria)")
+    with exp_excluir:
+        if df_etapas.empty:
+            st.caption("Nenhum resultado salvo no histórico para excluir.")
+        else:
+            st.markdown("##### 1. Excluir uma Ave Específica")
+            datas_disp_exc = sorted(df_etapas["Data"].unique(), key=lambda x: datetime.datetime.strptime(x, "%d/%m/%Y"), reverse=True)
+            data_exc_sel = st.selectbox("Selecione a Data da Etapa:", datas_disp_exc, key="sel_data_exc")
+            
+            df_na_data = df_etapas[df_etapas["Data"] == data_exc_sel]
+            
+            opcoes_aves_exc = [
+                f"[{row['Espécie']}] {row['Colocação']} - {row['Nome da Ave']} (Prop: {row['Proprietário']} | Anilha: {row['Anilha']})"
+                for _, row in df_na_data.iterrows()
+            ]
+            indices_reais_exc = df_na_data.index.tolist()
+            
+            item_exc_escolhido = st.selectbox("Selecione o resultado que deseja apagar:", opcoes_aves_exc, key="sel_ave_exc")
+            
+            if st.button("🗑️ Excluir Resultado Individual Selecionado", use_container_width=True):
+                idx_para_apagar = indices_reais_exc[opcoes_aves_exc.index(item_exc_escolhido)]
+                st.session_state["banco_resultados_viva"]["historico_etapas"] = df_etapas.drop(idx_para_apagar).reset_index(drop=True)
+                salvar_resultados_fisicos(st.session_state["banco_resultados_viva"])
+                st.warning("✅ Resultado individual removido com sucesso! A Classificação Geral foi atualizada.")
+                st.rerun()
+
+            st.write("---")
+            st.markdown("##### 2. Excluir Rodada / Espécie Inteira da Data")
+            especies_na_data = sorted(df_na_data["Espécie"].unique().tolist())
+            esp_exc_lote = st.selectbox("Selecione a Espécie que deseja apagar desta data:", ["TODAS AS ESPÉCIES DESTA DATA"] + especies_na_data, key="sel_esp_exc_lote")
+            
+            if st.checkbox(f"Confirmar que desejo apagar definitivamente os registros selecionados de {data_exc_sel}", key="chk_confirma_exc_lote"):
+                if st.button("💥 APAGAR RESULTADOS EM LOTE", use_container_width=True, type="primary"):
+                    if esp_exc_lote == "TODAS AS ESPÉCIES DESTA DATA":
+                        novo_df = df_etapas[df_etapas["Data"] != data_exc_sel].reset_index(drop=True)
+                    else:
+                        novo_df = df_etapas[~((df_etapas["Data"] == data_exc_sel) & (df_etapas["Espécie"] == esp_exc_lote))].reset_index(drop=True)
+                    
+                    st.session_state["banco_resultados_viva"]["historico_etapas"] = novo_df
+                    salvar_resultados_fisicos(st.session_state["banco_resultados_viva"])
+                    st.success("🗑️ Registros excluídos com sucesso!")
+                    st.rerun()
+
 # =========================================================================================
 # 📊 EXIBIÇÃO DOS DADOS: VISÍVEL PARA MASTER, DIRETORIA, SÓCIOS E VISITANTES
 # =========================================================================================
