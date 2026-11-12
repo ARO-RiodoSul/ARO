@@ -269,10 +269,11 @@ def gerar_imagem_oficial_aro(titulo_banner, subtitulo_info, especie, df_dados, m
     img.save(img_buffer, format="PNG", quality=95)
     img_buffer.seek(0)
     return img_buffer
-if "banco_resultados_viva" not in st.session_state:
+if "banco_resultados_viva" not in st.session_state or "temporadas" not in st.session_state["banco_resultados_viva"]:
     st.session_state["banco_resultados_viva"] = carregar_resultados_fisicos()
 
 banco_geral = st.session_state["banco_resultados_viva"]
+
 temporada_ativa = str(banco_geral.get("temporada_atual", str(datetime.date.today().year)))
 todas_temporadas = sorted(list(banco_geral["temporadas"].keys()), reverse=True)
 
