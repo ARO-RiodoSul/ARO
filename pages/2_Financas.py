@@ -295,20 +295,28 @@ if is_master:
     rascunho_torneio = st.session_state["banco_financeiro_viva"]["saldo_torneio_rascunho"]
     alterou_torneio = False
 
-    titulo_torneio = st.text_input(
-        "Identificação / Data do Torneio (opcional - aparece no topo da imagem):",
-        value=rascunho_torneio.get("titulo_evento", ""),
-        placeholder="Ex: Etapa 15/11/2026 - Sede ARO",
-        key="torneio_titulo_input"
-    )
-    if titulo_torneio != rascunho_torneio.get("titulo_evento", ""):
-        rascunho_torneio["titulo_evento"] = titulo_torneio
-        alterou_torneio = True
+    col_top_t1, col_top_t2 = st.columns()
+    with col_top_t1:
+        titulo_torneio = st.text_input(
+            "Identificação / Data do Torneio (aparece no topo da imagem):",
+            value=rascunho_torneio.get("titulo_evento", ""),
+            placeholder="Ex: Etapa 15/11/2026 - Sede ARO",
+            key="torneio_titulo_input"
+        )
+        if titulo_torneio != rascunho_torneio.get("titulo_evento", ""):
+            rascunho_torneio["titulo_evento"] = titulo_torneio
+            alterou_torneio = True
+    with col_top_t2:
+        logo_custom_up = st.file_uploader(
+            "Logo da ARO (opcional, se não carregar automático):",
+            type=["png", "jpg", "jpeg"],
+            key="upload_logo_torneio"
+        )
 
     st.markdown("#### 🟢 Receitas")
     total_receitas_torneio = 0.0
     for i in range(5):
-        c_rec_1, c_rec_2 = st.columns([3, 1])
+        c_rec_1, c_rec_2 = st.columns()
         with c_rec_1:
             desc_r = st.text_input(
                 f"Descrição da Receita {i+1}",
@@ -338,7 +346,7 @@ if is_master:
     st.markdown("#### 🔴 Despesas")
     total_despesas_torneio = 0.0
     for i in range(5):
-        c_desp_1, c_desp_2 = st.columns([3, 1])
+        c_desp_1, c_desp_2 = st.columns()
         with c_desp_1:
             desc_d = st.text_input(
                 f"Motivo da Despesa {i+1}",
@@ -379,22 +387,49 @@ if is_master:
         st.metric("Total Despesas", f"R$ {total_despesas_torneio:,.2f}")
     with col_t_res3:
         st.metric("Saldo Final", f"R$ {saldo_final_torneio:,.2f}")
-
-    def carregar_fonte_segura(tamanho, negrito=False):
-        caminhos = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if negrito else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if negrito else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "arialbd.ttf" if negrito else "arial.ttf"
+    def carregar_fonte_segura(tamanho, negrito=True):
+        caminhos_bold = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+            "arialbd.ttf"
         ]
-        for c in caminhos:
+        caminhos_reg = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "arial.ttf"
+        ]
+        lista_busca = (caminhos_bold + caminhos_reg) if negrito else (caminhos_reg + caminhos_bold)
+        for c in lista_busca:
             if os.path.exists(c):
                 try:
                     return ImageFont.truetype(c, tamanho)
                 except:
                     pass
-        return ImageFont.load_default()
+        try:
+            return ImageFont.load_default(size=tamanho)
+        except:
+            return ImageFont.load_default()
 
-    def criar_imagem_saldo_torneio(dados_t, tot_rec, tot_desp, saldo_f):
+    def localizar_logo_aro(arquivo_up):
+        if arquivo_up is not None:
+            try:
+                return Image.open(arquivo_up).convert("RGBA")
+            except:
+                pass
+        possiveis_logos = [
+            "logo.png", "logo_aro.png", "aro_logo.png", "logo.jpg", "logo_aro.jpg",
+            "assets/logo.png", "assets/logo_aro.png", "imagens/logo.png", "images/logo.png"
+        ]
+        for caminho in possiveis_logos:
+            if os.path.exists(caminho):
+                try:
+                    return Image.open(caminho).convert("RGBA")
+                except:
+                    pass
+        return None
+
+    def criar_imagem_saldo_torneio(dados_t, tot_rec, tot_desp, saldo_f, arquivo_logo):
         recs_ativas = [r for r in dados_t["receitas"] if r["desc"].strip() != "" or float(r["valor"]) > 0]
         desps_ativas = [d for d in dados_t["despesas"] if d["desc"].strip() != "" or float(d["valor"]) > 0]
         
@@ -403,67 +438,80 @@ if is_master:
         if not desps_ativas:
             desps_ativas = [{"desc": "Nenhum lançamento", "valor": 0.0}]
 
-        largura = 900
-        altura = 260 + (len(recs_ativas) * 44) + 70 + (len(desps_ativas) * 44) + 170
+        largura = 1000
+        altura = 270 + (len(recs_ativas) * 52) + 85 + (len(desps_ativas) * 52) + 190
         img = Image.new("RGB", (largura, altura), color=(255, 255, 255))
         draw = ImageDraw.Draw(img)
 
-        f_titulo = carregar_fonte_segura(28, negrito=True)
-        f_subtitulo = carregar_fonte_segura(18, negrito=False)
-        f_secao = carregar_fonte_segura(21, negrito=True)
-        f_texto = carregar_fonte_segura(19, negrito=False)
-        f_texto_bold = carregar_fonte_segura(19, negrito=True)
-        f_saldo_final = carregar_fonte_segura(26, negrito=True)
+        f_titulo = carregar_fonte_segura(34, negrito=True)
+        f_subtitulo = carregar_fonte_segura(22, negrito=True)
+        f_secao = carregar_fonte_segura(25, negrito=True)
+        f_total_bloco = carregar_fonte_segura(28, negrito=True)
+        f_item = carregar_fonte_segura(23, negrito=True)
+        f_saldo_label = carregar_fonte_segura(28, negrito=True)
+        f_saldo_valor = carregar_fonte_segura(36, negrito=True)
 
         # Cabeçalho escuro
-        draw.rectangle([0, 0, largura, 115], fill=(30, 41, 59))
-        draw.text((40, 22), "ARO - SALDO DE TORNEIO", fill=(250, 204, 21), font=f_titulo)
+        draw.rectangle([0, 0, largura, 135], fill=(30, 41, 59))
+        
+        logo_img = localizar_logo_aro(arquivo_logo)
+        x_texto_cabecalho = 40
+        if logo_img is not None:
+            logo_redim = logo_img.copy()
+            logo_redim.thumbnail((105, 105), Image.Resampling.LANCZOS)
+            y_logo = (135 - logo_redim.height) // 2
+            img.paste(logo_redim, (35, y_logo), logo_redim)
+            x_texto_cabecalho = 35 + logo_redim.width + 25
+
+        draw.text((x_texto_cabecalho, 24), "ARO - SALDO DE TORNEIO", fill=(250, 204, 21), font=f_titulo)
         sub_txt = dados_t.get("titulo_evento", "").strip()
         if not sub_txt:
             sub_txt = "Associação Rio do Sul de Ornitologia"
-        draw.text((40, 68), sub_txt, fill=(241, 245, 249), font=f_subtitulo)
+        draw.text((x_texto_cabecalho, 76), sub_txt, fill=(255, 255, 255), font=f_subtitulo)
 
-        y = 145
+        y = 165
         # Bloco Receitas
-        draw.rectangle([40, y, largura - 40, y + 44], fill=(220, 252, 231))
-        draw.text((55, y + 10), "RECEITAS", fill=(22, 101, 52), font=f_secao)
-        draw.text((largura - 270, y + 10), f"Total: R$ {tot_rec:,.2f}", fill=(22, 101, 52), font=f_secao)
-        y += 54
+        draw.rectangle([35, y, largura - 35, y + 54], fill=(220, 252, 231), outline=(22, 101, 52), width=2)
+        draw.text((55, y + 12), "RECEITAS", fill=(20, 83, 45), font=f_secao)
+        txt_tot_rec = f"TOTAL: R$ {tot_rec:,.2f}"
+        draw.text((largura - 55, y + 27), txt_tot_rec, fill=(20, 83, 45), font=f_total_bloco, anchor="rm")
+        y += 64
 
         for idx, item in enumerate(recs_ativas):
             cor_fundo = (248, 250, 252) if idx % 2 == 0 else (255, 255, 255)
-            draw.rectangle([40, y, largura - 40, y + 40], fill=cor_fundo, outline=(226, 232, 240))
+            draw.rectangle([35, y, largura - 35, y + 48], fill=cor_fundo, outline=(203, 213, 225), width=1)
             desc_limpa = item["desc"].strip() if item["desc"].strip() else "Entrada sem descrição"
-            if len(desc_limpa) > 45:
-                desc_limpa = desc_limpa[:42] + "..."
-            draw.text((55, y + 9), desc_limpa, fill=(30, 41, 59), font=f_texto)
-            draw.text((largura - 230, y + 9), f"R$ {float(item['valor']):,.2f}", fill=(22, 101, 52), font=f_texto_bold)
-            y += 42
+            if len(desc_limpa) > 40:
+                desc_limpa = desc_limpa[:37] + "..."
+            draw.text((55, y + 24), desc_limpa, fill=(15, 23, 42), font=f_item, anchor="lm")
+            draw.text((largura - 55, y + 24), f"R$ {float(item['valor']):,.2f}", fill=(20, 83, 45), font=f_item, anchor="rm")
+            y += 50
 
-        y += 28
+        y += 32
         # Bloco Despesas
-        draw.rectangle([40, y, largura - 40, y + 44], fill=(254, 226, 226))
-        draw.text((55, y + 10), "DESPESAS", fill=(153, 27, 27), font=f_secao)
-        draw.text((largura - 270, y + 10), f"Total: R$ {tot_desp:,.2f}", fill=(153, 27, 27), font=f_secao)
-        y += 54
+        draw.rectangle([35, y, largura - 35, y + 54], fill=(254, 226, 226), outline=(153, 27, 27), width=2)
+        draw.text((55, y + 12), "DESPESAS", fill=(127, 29, 29), font=f_secao)
+        txt_tot_desp = f"TOTAL: R$ {tot_desp:,.2f}"
+        draw.text((largura - 55, y + 27), txt_tot_desp, fill=(127, 29, 29), font=f_total_bloco, anchor="rm")
+        y += 64
 
         for idx, item in enumerate(desps_ativas):
             cor_fundo = (248, 250, 252) if idx % 2 == 0 else (255, 255, 255)
-            draw.rectangle([40, y, largura - 40, y + 40], fill=cor_fundo, outline=(226, 232, 240))
+            draw.rectangle([35, y, largura - 35, y + 48], fill=cor_fundo, outline=(203, 213, 225), width=1)
             desc_limpa = item["desc"].strip() if item["desc"].strip() else "Despesa sem motivo"
-            if len(desc_limpa) > 45:
-                desc_limpa = desc_limpa[:42] + "..."
-            draw.text((55, y + 9), desc_limpa, fill=(30, 41, 59), font=f_texto)
-            draw.text((largura - 230, y + 9), f"R$ {float(item['valor']):,.2f}", fill=(153, 27, 27), font=f_texto_bold)
-            y += 42
+            if len(desc_limpa) > 40:
+                desc_limpa = desc_limpa[:37] + "..."
+            draw.text((55, y + 24), desc_limpa, fill=(15, 23, 42), font=f_item, anchor="lm")
+            draw.text((largura - 55, y + 24), f"R$ {float(item['valor']):,.2f}", fill=(127, 29, 29), font=f_item, anchor="rm")
+            y += 50
 
-        y += 35
+        y += 38
         # Caixa Saldo Final
         cor_box = (219, 234, 254) if saldo_f >= 0 else (254, 202, 202)
-        cor_txt_saldo = (30, 58, 138) if saldo_f >= 0 else (153, 27, 27)
-        draw.rectangle([40, y, largura - 40, y + 75], fill=cor_box, outline=cor_txt_saldo, width=2)
-        draw.text((60, y + 22), "SALDO FINAL DO TORNEIO:", fill=cor_txt_saldo, font=f_saldo_final)
-        draw.text((largura - 280, y + 22), f"R$ {saldo_f:,.2f}", fill=cor_txt_saldo, font=f_saldo_final)
+        cor_txt_saldo = (30, 58, 138) if saldo_f >= 0 else (127, 29, 29)
+        draw.rectangle([35, y, largura - 35, y + 92], fill=cor_box, outline=cor_txt_saldo, width=3)
+        draw.text((55, y + 46), "SALDO FINAL:", fill=cor_txt_saldo, font=f_saldo_label, anchor="lm")
+        draw.text((largura - 55, y + 46), f"R$ {saldo_f:,.2f}", fill=cor_txt_saldo, font=f_saldo_valor, anchor="rm")
 
         buf_img = io.BytesIO()
         img.save(buf_img, format="PNG")
@@ -476,7 +524,8 @@ if is_master:
             rascunho_torneio,
             total_receitas_torneio,
             total_despesas_torneio,
-            saldo_final_torneio
+            saldo_final_torneio,
+            logo_custom_up
         )
         st.image(imagem_pronta, caption="Pré-visualização do Saldo de Torneio", use_container_width=True)
         st.download_button(
