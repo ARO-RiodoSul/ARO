@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import datetime, io, pickle, os
+import datetime, io, pickle, os, threading
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
@@ -16,13 +16,18 @@ if st.session_state.get("user_role") not in ["master", "diretoria"]:
 st.title("💰 Fluxo de Caixa - ARO Rio do Sul")
 is_master = st.session_state.get("user_role") == "master"
 
-# Inclusão de Novembro 2026 no início da lista
 lista_meses = ["Novembro 2026", "Dezembro 2026"] + [
     f"{m} {a}" for a in ["2027", "2028"] 
     for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 ]
 
 ARQUIVO_FINANCAS_FISICO = "backup_financas_oficial.pkl"
+
+@st.cache_resource
+def obter_trava_arquivo():
+    return threading.Lock()
+
+trava_disco = obter_trava_arquivo()
 
 def criar_df_mes_padrao():
     return pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)])
@@ -34,49 +39,42 @@ def criar_estrutura_torneio_padrao():
         "despesas": [{"desc": "", "valor": 0.0} for _ in range(5)]
     }
 
-# BRIDGE DE COMPARTILHAMENTO DE RECURSO GLOBAL ENTRE SESSÕES E CELULARES
-@st.cache_resource
-def obter_banco_financeiro_global():
-    if os.path.exists(ARQUIVO_FINANCAS_FISICO):
-        try:
-            with open(ARQUIVO_FINANCAS_FISICO, "rb") as f:
-                dados = pickle.load(f)
-                if "meses" not in dados:
-                    dados["meses"] = {}
-                for m in lista_meses:
-                    if m not in dados["meses"]:
-                        dados["meses"][m] = criar_df_mes_padrao()
-                if "saldo_torneio_rascunho" not in dados:
-                    dados["saldo_torneio_rascunho"] = criar_estrutura_torneio_padrao()
-                return dados
-        except:
-            pass
-    estrutura_base = {
-        "saldo_anterior": 0.0,
-        "meses": {m: criar_df_mes_padrao() for m in lista_meses},
-        "saldo_torneio_rascunho": criar_estrutura_torneio_padrao()
-    }
-    with open(ARQUIVO_FINANCAS_FISICO, "wb") as f:
-        pickle.dump(estrutura_base, f)
-    return estrutura_base
+def carregar_banco_financeiro_atualizado():
+    with trava_disco:
+        if os.path.exists(ARQUIVO_FINANCAS_FISICO):
+            try:
+                with open(ARQUIVO_FINANCAS_FISICO, "rb") as f:
+                    dados = pickle.load(f)
+                    if "meses" not in dados:
+                        dados["meses"] = {}
+                    for m in lista_meses:
+                        if m not in dados["meses"]:
+                            dados["meses"][m] = criar_df_mes_padrao()
+                    if "saldo_torneio_rascunho" not in dados:
+                        dados["saldo_torneio_rascunho"] = criar_estrutura_torneio_padrao()
+                    return dados
+            except:
+                pass
+        estrutura_base = {
+            "saldo_anterior": 0.0,
+            "meses": {m: criar_df_mes_padrao() for m in lista_meses},
+            "saldo_torneio_rascunho": criar_estrutura_torneio_padrao()
+        }
+        with open(ARQUIVO_FINANCAS_FISICO, "wb") as f:
+            pickle.dump(estrutura_base, f)
+        return estrutura_base
 
-# Sincroniza a memória local da página com a ponte física do servidor
-if "banco_financeiro_viva" not in st.session_state:
-    st.session_state["banco_financeiro_viva"] = obter_banco_financeiro_global()
-
-for m in lista_meses:
-    if m not in st.session_state["banco_financeiro_viva"]["meses"]:
-        st.session_state["banco_financeiro_viva"]["meses"][m] = criar_df_mes_padrao()
-if "saldo_torneio_rascunho" not in st.session_state["banco_financeiro_viva"]:
-    st.session_state["banco_financeiro_viva"]["saldo_torneio_rascunho"] = criar_estrutura_torneio_padrao()
+# Sempre sincroniza com a última versão salva no servidor ao carregar a página
+st.session_state["banco_financeiro_viva"] = carregar_banco_financeiro_atualizado()
 
 dados_mestre = st.session_state["banco_financeiro_viva"]
 df_global_financas = dados_mestre["meses"]
 saldo_anterior = dados_mestre["saldo_anterior"]
 
 def persistir_financeiro_disco():
-    with open(ARQUIVO_FINANCAS_FISICO, "wb") as f:
-        pickle.dump(st.session_state["banco_financeiro_viva"], f)
+    with trava_disco:
+        with open(ARQUIVO_FINANCAS_FISICO, "wb") as f:
+            pickle.dump(st.session_state["banco_financeiro_viva"], f)
 
 # Cálculo dos acumulados
 total_entradas_geral = 0.0
