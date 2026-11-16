@@ -295,7 +295,7 @@ if is_master:
     rascunho_torneio = st.session_state["banco_financeiro_viva"]["saldo_torneio_rascunho"]
     alterou_torneio = False
 
-    col_top_t1, col_top_t2 = st.columns()
+    col_top_t1, col_top_t2 = st.columns(2)
     with col_top_t1:
         titulo_torneio = st.text_input(
             "Identificação / Data do Torneio (aparece no topo da imagem):",
@@ -316,7 +316,7 @@ if is_master:
     st.markdown("#### 🟢 Receitas")
     total_receitas_torneio = 0.0
     for i in range(5):
-        c_rec_1, c_rec_2 = st.columns()
+        c_rec_1, c_rec_2 = st.columns([3, 1])
         with c_rec_1:
             desc_r = st.text_input(
                 f"Descrição da Receita {i+1}",
@@ -346,7 +346,7 @@ if is_master:
     st.markdown("#### 🔴 Despesas")
     total_despesas_torneio = 0.0
     for i in range(5):
-        c_desp_1, c_desp_2 = st.columns()
+        c_desp_1, c_desp_2 = st.columns([3, 1])
         with c_desp_1:
             desc_d = st.text_input(
                 f"Motivo da Despesa {i+1}",
