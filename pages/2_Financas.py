@@ -39,6 +39,13 @@ def criar_estrutura_torneio_padrao():
         "despesas": [{"desc": "", "valor": 0.0} for _ in range(5)]
     }
 
+def criar_estrutura_conferencia_padrao():
+    return {
+        "conta_aro": 0.0,
+        "conta_terceiros": 0.0,
+        "dinheiro_fisico": 0.0
+    }
+
 def carregar_banco_financeiro_atualizado():
     with trava_disco:
         if os.path.exists(ARQUIVO_FINANCAS_FISICO):
@@ -52,13 +59,16 @@ def carregar_banco_financeiro_atualizado():
                             dados["meses"][m] = criar_df_mes_padrao()
                     if "saldo_torneio_rascunho" not in dados:
                         dados["saldo_torneio_rascunho"] = criar_estrutura_torneio_padrao()
+                    if "conferencia_valores" not in dados:
+                        dados["conferencia_valores"] = criar_estrutura_conferencia_padrao()
                     return dados
             except:
                 pass
         estrutura_base = {
             "saldo_anterior": 0.0,
             "meses": {m: criar_df_mes_padrao() for m in lista_meses},
-            "saldo_torneio_rascunho": criar_estrutura_torneio_padrao()
+            "saldo_torneio_rascunho": criar_estrutura_torneio_padrao(),
+            "conferencia_valores": criar_estrutura_conferencia_padrao()
         }
         with open(ARQUIVO_FINANCAS_FISICO, "wb") as f:
             pickle.dump(estrutura_base, f)
@@ -66,6 +76,9 @@ def carregar_banco_financeiro_atualizado():
 
 # Sempre sincroniza com a última versão salva no servidor ao carregar a página
 st.session_state["banco_financeiro_viva"] = carregar_banco_financeiro_atualizado()
+
+if "conferencia_valores" not in st.session_state["banco_financeiro_viva"]:
+    st.session_state["banco_financeiro_viva"]["conferencia_valores"] = criar_estrutura_conferencia_padrao()
 
 dados_mestre = st.session_state["banco_financeiro_viva"]
 df_global_financas = dados_mestre["meses"]
@@ -149,6 +162,85 @@ if is_master:
 else:
     st.dataframe(df_atual, hide_index=True, column_config={"Dia": "Dia", "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="%.2f"), "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="%.2f"), "Motivo": "Motivo/Descrição"}, use_container_width=True)
 
+# =========================================================================================
+# 🔍 NOVO MÓDULO: CONFERÊNCIA DE VALORES (MASTER EDITA / DIRETORIA VISUALIZA)
+# =========================================================================================
+st.write("---")
+st.markdown("### 🔍 Conferência de Valores (Onde está o dinheiro)")
+st.caption("Conferência entre os saldos reais nas contas/espécie e o Saldo Total registrado no sistema.")
+
+conf_dados = st.session_state["banco_financeiro_viva"]["conferencia_valores"]
+
+if is_master:
+    col_c1, col_c2, col_c3 = st.columns(3)
+    with col_c1:
+        val_aro = st.number_input(
+            "Valores Conta ARO (R$)",
+            value=float(conf_dados.get("conta_aro", 0.0)),
+            step=50.0,
+            format="%.2f",
+            key="conf_conta_aro"
+        )
+    with col_c2:
+        val_terc = st.number_input(
+            "Valores Conta 3º (R$)",
+            value=float(conf_dados.get("conta_terceiros", 0.0)),
+            step=50.0,
+            format="%.2f",
+            key="conf_conta_terc"
+        )
+    with col_c3:
+        val_fisico = st.number_input(
+            "Dinheiro Físico / Troco (R$)",
+            value=float(conf_dados.get("dinheiro_fisico", 0.0)),
+            step=50.0,
+            format="%.2f",
+            key="conf_dinheiro_fisico"
+        )
+
+    if (
+        val_aro != float(conf_dados.get("conta_aro", 0.0))
+        or val_terc != float(conf_dados.get("conta_terceiros", 0.0))
+        or val_fisico != float(conf_dados.get("dinheiro_fisico", 0.0))
+    ):
+        st.session_state["banco_financeiro_viva"]["conferencia_valores"] = {
+            "conta_aro": val_aro,
+            "conta_terceiros": val_terc,
+            "dinheiro_fisico": val_fisico
+        }
+        persistir_financeiro_disco()
+        st.rerun()
+else:
+    val_aro = float(conf_dados.get("conta_aro", 0.0))
+    val_terc = float(conf_dados.get("conta_terceiros", 0.0))
+    val_fisico = float(conf_dados.get("dinheiro_fisico", 0.0))
+
+    col_c1, col_c2, col_c3 = st.columns(3)
+    with col_c1:
+        st.metric("Valores Conta ARO", f"R$ {val_aro:,.2f}")
+    with col_c2:
+        st.metric("Valores Conta 3º", f"R$ {val_terc:,.2f}")
+    with col_c3:
+        st.metric("Dinheiro Físico (Troco)", f"R$ {val_fisico:,.2f}")
+
+soma_conferencia = val_aro + val_terc + val_fisico
+diferenca_caixa = soma_conferencia - saldo_total
+
+st.write("")
+col_res_c1, col_res_c2, col_res_c3 = st.columns(3)
+with col_res_c1:
+    st.metric("Total Conferido (Soma dos 3)", f"R$ {soma_conferencia:,.2f}")
+with col_res_c2:
+    st.metric("Saldo (Total) do Sistema", f"R$ {saldo_total:,.2f}")
+with col_res_c3:
+    st.metric("Diferença (Conferido - Saldo)", f"R$ {diferenca_caixa:,.2f}")
+
+if abs(diferenca_caixa) < 0.01:
+    st.success("✅ Caixa Batido! A soma das contas e do dinheiro físico bate exatamente com o Saldo Total do sistema.")
+elif diferenca_caixa > 0:
+    st.warning(f"⚠️ Atenção: Há R$ {diferenca_caixa:,.2f} a MAIS nas contas/dinheiro físico em relação ao Saldo Total do sistema.")
+else:
+    st.error(f"🚨 Atenção: Está FALTANDO R$ {abs(diferenca_caixa):,.2f} nas contas/dinheiro físico em relação ao Saldo Total do sistema.")
 st.write("---")
 st.markdown("### 💾 Central de Backups do Caixa")
 col_fback_1, col_fback_2 = st.columns(2)
@@ -171,6 +263,8 @@ with col_fback_2:
                             dados_importados["meses"][m] = criar_df_mes_padrao()
                     if "saldo_torneio_rascunho" not in dados_importados:
                         dados_importados["saldo_torneio_rascunho"] = criar_estrutura_torneio_padrao()
+                    if "conferencia_valores" not in dados_importados:
+                        dados_importados["conferencia_valores"] = criar_estrutura_conferencia_padrao()
                         
                     if st.button("🔄 Confirmar Restauração do Caixa", use_container_width=True, type="primary"):
                         st.session_state["banco_financeiro_viva"] = dados_importados
