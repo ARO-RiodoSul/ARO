@@ -409,18 +409,18 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
 
         # Cabeçalhos da tabela
         canvas_obj.setFont("Helvetica-BoldOblique", 7.5)
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "NOME PÁSSARO")
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "CLUBE")
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "DATA")
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "Nº ESTACA")
+        canvas_obj.drawCentredString((col_xs[0] + col_xs[1]) / 2, tab_y_mid + 0.12 * cm, "NOME PÁSSARO")
+        canvas_obj.drawCentredString((col_xs[1] + col_xs[2]) / 2, tab_y_mid + 0.12 * cm, "CLUBE")
+        canvas_obj.drawCentredString((col_xs[2] + col_xs[3]) / 2, tab_y_mid + 0.12 * cm, "DATA")
+        canvas_obj.drawCentredString((col_xs[3] + col_xs[4]) / 2, tab_y_mid + 0.12 * cm, "Nº ESTACA")
 
         # Valores preenchidos na tabela
         canvas_obj.setFont("Helvetica-Bold", 8.5)
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, ave_str)
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, clube_ficha.upper())
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, data_str)
+        canvas_obj.drawCentredString((col_xs[0] + col_xs[1]) / 2, tab_y_bot + 0.20 * cm, ave_str)
+        canvas_obj.drawCentredString((col_xs[1] + col_xs[2]) / 2, tab_y_bot + 0.20 * cm, clube_ficha.upper())
+        canvas_obj.drawCentredString((col_xs[2] + col_xs[3]) / 2, tab_y_bot + 0.20 * cm, data_str)
         canvas_obj.setFont("Helvetica-Bold", 10)
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.18 * cm, est_str)
+        canvas_obj.drawCentredString((col_xs[3] + col_xs[4]) / 2, tab_y_bot + 0.18 * cm, est_str)
 
     canvas_obj.save()
     buf.seek(0)
