@@ -27,23 +27,33 @@ ARQUIVO_EVENTO = "status_evento.pkl"
 
 def carregar_dados_fisicos():
     if os.path.exists(ARQUIVO_CONFIRMADOS):
-        with open(ARQUIVO_CONFIRMADOS, "rb") as f: st.session_state["dados_torneios_internos"] = pickle.load(f)
-    else: st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
+        with open(ARQUIVO_CONFIRMADOS, "rb") as f:
+            st.session_state["dados_torneios_internos"] = pickle.load(f)
+    else:
+        st.session_state["dados_torneios_internos"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Estaca", "Valor", "Clube"])
 
     if os.path.exists(ARQUIVO_PENDENTES):
-        with open(ARQUIVO_PENDENTES, "rb") as f: st.session_state["inscricoes_pendentes_aro"] = pickle.load(f)
-    else: st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
+        with open(ARQUIVO_PENDENTES, "rb") as f:
+            st.session_state["inscricoes_pendentes_aro"] = pickle.load(f)
+    else:
+        st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
 
     if os.path.exists(ARQUIVO_EVENTO):
-        with open(ARQUIVO_EVENTO, "rb") as f: st.session_state["torneio_ativo_data"] = pickle.load(f)
-    else: st.session_state["torneio_ativo_data"] = None
+        with open(ARQUIVO_EVENTO, "rb") as f:
+            st.session_state["torneio_ativo_data"] = pickle.load(f)
+    else:
+        st.session_state["torneio_ativo_data"] = None
 
 def salvar_dados_fisicos():
-    with open(ARQUIVO_CONFIRMADOS, "wb") as f: pickle.dump(st.session_state["dados_torneios_internos"], f)
-    with open(ARQUIVO_PENDENTES, "wb") as f: pickle.dump(st.session_state["inscricoes_pendentes_aro"], f)
+    with open(ARQUIVO_CONFIRMADOS, "wb") as f:
+        pickle.dump(st.session_state["dados_torneios_internos"], f)
+    with open(ARQUIVO_PENDENTES, "wb") as f:
+        pickle.dump(st.session_state["inscricoes_pendentes_aro"], f)
     if st.session_state["torneio_ativo_data"] is not None:
-        with open(ARQUIVO_EVENTO, "wb") as f: pickle.dump(st.session_state["torneio_ativo_data"], f)
-    elif os.path.exists(ARQUIVO_EVENTO): os.remove(ARQUIVO_EVENTO)
+        with open(ARQUIVO_EVENTO, "wb") as f:
+            pickle.dump(st.session_state["torneio_ativo_data"], f)
+    elif os.path.exists(ARQUIVO_EVENTO):
+        os.remove(ARQUIVO_EVENTO)
 
 carregar_dados_fisicos()
 especies_validas = ["Trinca Ferro", "Coleiro", "Bico de Pimenta", "Canário", "Azulão", "Tiziu"]
@@ -409,18 +419,18 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
 
         # Cabeçalhos da tabela
         canvas_obj.setFont("Helvetica-BoldOblique", 7.5)
-        canvas_obj.drawCentredString((col_xs[0] + col_xs[1]) / 2, tab_y_mid + 0.12 * cm, "NOME PÁSSARO")
-        canvas_obj.drawCentredString((col_xs[1] + col_xs[2]) / 2, tab_y_mid + 0.12 * cm, "CLUBE")
-        canvas_obj.drawCentredString((col_xs[2] + col_xs[3]) / 2, tab_y_mid + 0.12 * cm, "DATA")
-        canvas_obj.drawCentredString((col_xs[3] + col_xs[4]) / 2, tab_y_mid + 0.12 * cm, "Nº ESTACA")
+        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "NOME PÁSSARO")
+        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "CLUBE")
+        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "DATA")
+        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "Nº ESTACA")
 
         # Valores preenchidos na tabela
         canvas_obj.setFont("Helvetica-Bold", 8.5)
-        canvas_obj.drawCentredString((col_xs[0] + col_xs[1]) / 2, tab_y_bot + 0.20 * cm, ave_str)
-        canvas_obj.drawCentredString((col_xs[1] + col_xs[2]) / 2, tab_y_bot + 0.20 * cm, clube_ficha.upper())
-        canvas_obj.drawCentredString((col_xs[2] + col_xs[3]) / 2, tab_y_bot + 0.20 * cm, data_str)
+        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, ave_str)
+        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, clube_ficha.upper())
+        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, data_str)
         canvas_obj.setFont("Helvetica-Bold", 10)
-        canvas_obj.drawCentredString((col_xs[3] + col_xs[4]) / 2, tab_y_bot + 0.18 * cm, est_str)
+        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.18 * cm, est_str)
 
     canvas_obj.save()
     buf.seek(0)
@@ -528,3 +538,46 @@ if role_atual == "master":
                 salvar_dados_fisicos()
                 st.warning("Inscrição removida com sucesso!")
                 st.rerun()
+
+    # =========================================================================================
+    # 💾 CENTRAL DE BACKUP E RESTAURAÇÃO DO TORNEIO (EXCLUSIVO MASTER)
+    # =========================================================================================
+    st.write("---")
+    st.markdown("### 💾 Central de Backup do Torneio")
+    st.caption("Salve uma cópia de segurança das inscrições confirmadas, pendentes e da data do evento.")
+    
+    col_tback_1, col_tback_2 = st.columns(2)
+    with col_tback_1:
+        st.markdown("**Exportar Dados do Torneio**")
+        pacote_backup_torneio = {
+            "confirmados": st.session_state["dados_torneios_internos"],
+            "pendentes": st.session_state["inscricoes_pendentes_aro"],
+            "data_evento": st.session_state["torneio_ativo_data"]
+        }
+        buffer_pkl_torneio = pickle.dumps(pacote_backup_torneio)
+        st.download_button(
+            label="📥 Baixar Backup do Torneio (.PKL)",
+            data=buffer_pkl_torneio,
+            file_name="backup_torneio_aro.pkl",
+            mime="application/octet-stream",
+            use_container_width=True
+        )
+
+    with col_tback_2:
+        st.markdown("**Importar Arquivo de Backup**")
+        arq_torneio_up = st.file_uploader("Selecione o arquivo '.pkl' para restaurar:", type=["pkl"], key="uploader_backup_torneio")
+        if arq_torneio_up is not None:
+            try:
+                dados_t_imp = pickle.load(arq_torneio_up)
+                if "confirmados" in dados_t_imp and "pendentes" in dados_t_imp and "data_evento" in dados_t_imp:
+                    if st.button("🔄 Confirmar Restauração do Torneio", use_container_width=True, type="primary"):
+                        st.session_state["dados_torneios_internos"] = dados_t_imp["confirmados"]
+                        st.session_state["inscricoes_pendentes_aro"] = dados_t_imp["pendentes"]
+                        st.session_state["torneio_ativo_data"] = dados_t_imp["data_evento"]
+                        salvar_dados_fisicos()
+                        st.success("✅ Torneio restaurado com sucesso!")
+                        st.rerun()
+                else:
+                    st.error("Este arquivo não é um backup válido da aba Torneios.")
+            except:
+                st.error("Erro ao ler o arquivo de backup.")
