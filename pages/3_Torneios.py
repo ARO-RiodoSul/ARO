@@ -402,35 +402,37 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
         c3_w = tab_w * 0.21
         c4_w = tab_w * 0.17
 
-        col_xs = [
-            tab_x,
-            tab_x + c1_w,
-            tab_x + c1_w + c2_w,
-            tab_x + c1_w + c2_w + c3_w,
-            tab_x + tab_w
-        ]
+        div_1 = tab_x + c1_w
+        div_2 = div_1 + c2_w
+        div_3 = div_2 + c3_w
+
+        x_centro_1 = tab_x + (c1_w / 2.0)
+        x_centro_2 = div_1 + (c2_w / 2.0)
+        x_centro_3 = div_2 + (c3_w / 2.0)
+        x_centro_4 = div_3 + (c4_w / 2.0)
 
         canvas_obj.setLineWidth(0.7)
         canvas_obj.rect(tab_x, tab_y_bot, tab_w, tab_h_dados + tab_h_cab, stroke=1, fill=0)
         canvas_obj.line(tab_x, tab_y_mid, tab_x + tab_w, tab_y_mid)
 
-        for cx in col_xs[1:-1]:
-            canvas_obj.line(cx, tab_y_bot, cx, tab_y_top)
+        canvas_obj.line(div_1, tab_y_bot, div_1, tab_y_top)
+        canvas_obj.line(div_2, tab_y_bot, div_2, tab_y_top)
+        canvas_obj.line(div_3, tab_y_bot, div_3, tab_y_top)
 
         # Cabeçalhos da tabela
         canvas_obj.setFont("Helvetica-BoldOblique", 7.5)
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "NOME PÁSSARO")
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "CLUBE")
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "DATA")
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_mid + 0.12 * cm, "Nº ESTACA")
+        canvas_obj.drawCentredString(x_centro_1, tab_y_mid + 0.12 * cm, "NOME PÁSSARO")
+        canvas_obj.drawCentredString(x_centro_2, tab_y_mid + 0.12 * cm, "CLUBE")
+        canvas_obj.drawCentredString(x_centro_3, tab_y_mid + 0.12 * cm, "DATA")
+        canvas_obj.drawCentredString(x_centro_4, tab_y_mid + 0.12 * cm, "Nº ESTACA")
 
         # Valores preenchidos na tabela
         canvas_obj.setFont("Helvetica-Bold", 8.5)
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, ave_str)
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, clube_ficha.upper())
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.20 * cm, data_str)
+        canvas_obj.drawCentredString(x_centro_1, tab_y_bot + 0.20 * cm, ave_str)
+        canvas_obj.drawCentredString(x_centro_2, tab_y_bot + 0.20 * cm, clube_ficha.upper())
+        canvas_obj.drawCentredString(x_centro_3, tab_y_bot + 0.20 * cm, data_str)
         canvas_obj.setFont("Helvetica-Bold", 10)
-        canvas_obj.drawCentredString((col_xs + col_xs) / 2, tab_y_bot + 0.18 * cm, est_str)
+        canvas_obj.drawCentredString(x_centro_4, tab_y_bot + 0.18 * cm, est_str)
 
     canvas_obj.save()
     buf.seek(0)
