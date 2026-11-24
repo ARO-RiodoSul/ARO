@@ -184,6 +184,7 @@ if is_master:
         st.rerun()
 else:
     st.dataframe(df_atual, hide_index=True, column_config={"Dia": "Dia", "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="%.2f"), "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="%.2f"), "Motivo": "Motivo/Descrição"}, use_container_width=True)
+
 # =========================================================================================
 # 🔍 NOVO MÓDULO: CONFERÊNCIA DE VALORES (MASTER EDITA / DIRETORIA VISUALIZA)
 # =========================================================================================
