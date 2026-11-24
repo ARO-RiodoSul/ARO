@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
-import datetime, io, pickle, os, json
+import datetime, io, pickle, os, threading
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
+from reportlab.lib import colors
 from PIL import Image, ImageDraw, ImageFont
-from conexao_db import get_supabase
 
 st.set_page_config(page_title="Finanças - Painel ARO", page_icon="💰", layout="wide")
 
@@ -16,12 +16,18 @@ if st.session_state.get("user_role") not in ["master", "diretoria"]:
 st.title("💰 Fluxo de Caixa - ARO Rio do Sul")
 is_master = st.session_state.get("user_role") == "master"
 
-sb = get_supabase()
-
 lista_meses = ["Novembro 2026", "Dezembro 2026"] + [
     f"{m} {a}" for a in ["2027", "2028"] 
     for m in ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 ]
+
+ARQUIVO_FINANCAS_FISICO = "backup_financas_oficial.pkl"
+
+@st.cache_resource
+def obter_trava_arquivo():
+    return threading.Lock()
+
+trava_disco = obter_trava_arquivo()
 
 def criar_df_mes_padrao():
     return pd.DataFrame([{"Dia": i, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""} for i in range(1, 32)])
@@ -40,77 +46,48 @@ def criar_estrutura_conferencia_padrao():
         "dinheiro_fisico": 0.0
     }
 
-def serializar_dados_para_nuvem(dados):
-    meses_serializados = {}
-    for m, df_m in dados["meses"].items():
-        if isinstance(df_m, pd.DataFrame):
-            meses_serializados[m] = df_m.fillna({"Dia": 1, "Entradas": 0.0, "Saídas": 0.0, "Motivo": ""}).to_dict(orient="records")
-        else:
-            meses_serializados[m] = df_m
-    return {
-        "saldo_anterior": float(dados.get("saldo_anterior", 0.0)),
-        "meses": meses_serializados,
-        "saldo_torneio_rascunho": dados.get("saldo_torneio_rascunho", criar_estrutura_torneio_padrao()),
-        "conferencia_valores": dados.get("conferencia_valores", criar_estrutura_conferencia_padrao())
-    }
+def carregar_banco_financeiro_atualizado():
+    with trava_disco:
+        if os.path.exists(ARQUIVO_FINANCAS_FISICO):
+            try:
+                with open(ARQUIVO_FINANCAS_FISICO, "rb") as f:
+                    dados = pickle.load(f)
+                    if "meses" not in dados:
+                        dados["meses"] = {}
+                    for m in lista_meses:
+                        if m not in dados["meses"]:
+                            dados["meses"][m] = criar_df_mes_padrao()
+                    if "saldo_torneio_rascunho" not in dados:
+                        dados["saldo_torneio_rascunho"] = criar_estrutura_torneio_padrao()
+                    if "conferencia_valores" not in dados:
+                        dados["conferencia_valores"] = criar_estrutura_conferencia_padrao()
+                    return dados
+            except:
+                pass
+        estrutura_base = {
+            "saldo_anterior": 0.0,
+            "meses": {m: criar_df_mes_padrao() for m in lista_meses},
+            "saldo_torneio_rascunho": criar_estrutura_torneio_padrao(),
+            "conferencia_valores": criar_estrutura_conferencia_padrao()
+        }
+        with open(ARQUIVO_FINANCAS_FISICO, "wb") as f:
+            pickle.dump(estrutura_base, f)
+        return estrutura_base
 
-def deserializar_dados_da_nuvem(dados_json):
-    meses_df = {}
-    meses_brutos = dados_json.get("meses", {})
-    for m in lista_meses:
-        if m in meses_brutos and meses_brutos[m]:
-            df_temp = pd.DataFrame(meses_brutos[m])
-            for col, padrao in [("Dia", 1), ("Entradas", 0.0), ("Saídas", 0.0), ("Motivo", "")]:
-                if col not in df_temp.columns:
-                    df_temp[col] = padrao
-            meses_df[m] = df_temp[["Dia", "Entradas", "Saídas", "Motivo"]]
-        else:
-            meses_df[m] = criar_df_mes_padrao()
+# Sempre sincroniza com a última versão salva no servidor ao carregar a página
+st.session_state["banco_financeiro_viva"] = carregar_banco_financeiro_atualizado()
 
-    return {
-        "saldo_anterior": float(dados_json.get("saldo_anterior", 0.0)),
-        "meses": meses_df,
-        "saldo_torneio_rascunho": dados_json.get("saldo_torneio_rascunho", criar_estrutura_torneio_padrao()),
-        "conferencia_valores": dados_json.get("conferencia_valores", criar_estrutura_conferencia_padrao())
-    }
-
-def carregar_banco_financeiro_nuvem():
-    try:
-        res = sb.table("estado_financas").select("dados_json").eq("id", 1).execute()
-        if res.data and len(res.data) > 0:
-            return deserializar_dados_da_nuvem(res.data[0]["dados_json"])
-    except Exception as e:
-        st.error(f"Erro ao ler finanças da nuvem: {e}")
-
-    estrutura_base = {
-        "saldo_anterior": 0.0,
-        "meses": {m: criar_df_mes_padrao() for m in lista_meses},
-        "saldo_torneio_rascunho": criar_estrutura_torneio_padrao(),
-        "conferencia_valores": criar_estrutura_conferencia_padrao()
-    }
-    try:
-        sb.table("estado_financas").upsert({"id": 1, "dados_json": serializar_dados_para_nuvem(estrutura_base)}).execute()
-    except:
-        pass
-    return estrutura_base
-
-def persistir_financeiro_nuvem():
-    try:
-        pacote = serializar_dados_para_nuvem(st.session_state["banco_financeiro_viva"])
-        sb.table("estado_financas").upsert({
-            "id": 1,
-            "dados_json": pacote,
-            "atualizado_em": datetime.datetime.now(datetime.timezone.utc).isoformat()
-        }).execute()
-    except Exception as e:
-        st.error(f"Erro ao salvar alterações na nuvem: {e}")
-
-# Sempre sincroniza com a última versão salva na nuvem ao carregar a página
-st.session_state["banco_financeiro_viva"] = carregar_banco_financeiro_nuvem()
+if "conferencia_valores" not in st.session_state["banco_financeiro_viva"]:
+    st.session_state["banco_financeiro_viva"]["conferencia_valores"] = criar_estrutura_conferencia_padrao()
 
 dados_mestre = st.session_state["banco_financeiro_viva"]
 df_global_financas = dados_mestre["meses"]
 saldo_anterior = dados_mestre["saldo_anterior"]
+
+def persistir_financeiro_disco():
+    with trava_disco:
+        with open(ARQUIVO_FINANCAS_FISICO, "wb") as f:
+            pickle.dump(st.session_state["banco_financeiro_viva"], f)
 
 # Cálculo dos acumulados
 total_entradas_geral = 0.0
@@ -130,7 +107,7 @@ with st.container():
         novo_saldo_anterior = st.number_input("Saldo Anterior (R$)", value=float(saldo_anterior), step=100.0, key="edit_saldo_ant")
         if novo_saldo_anterior != saldo_anterior:
             st.session_state["banco_financeiro_viva"]["saldo_anterior"] = novo_saldo_anterior
-            persistir_financeiro_nuvem()
+            persistir_financeiro_disco()
             st.rerun()
     else:
         st.metric(label="Saldo Anterior", value=f"R$ {saldo_anterior:,.2f}")
@@ -180,7 +157,7 @@ if is_master:
         df_editado["Dia"] = pd.to_numeric(df_editado["Dia"], errors='coerce')
         df_editado = df_editado.dropna(subset=["Dia"]).sort_values(by="Dia").reset_index(drop=True)
         st.session_state["banco_financeiro_viva"]["meses"][mes_selecionado] = df_editado
-        persistir_financeiro_nuvem()
+        persistir_financeiro_disco()
         st.rerun()
 else:
     st.dataframe(df_atual, hide_index=True, column_config={"Dia": "Dia", "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="%.2f"), "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="%.2f"), "Motivo": "Motivo/Descrição"}, use_container_width=True)
@@ -231,7 +208,7 @@ if is_master:
             "conta_terceiros": val_terc,
             "dinheiro_fisico": val_fisico
         }
-        persistir_financeiro_nuvem()
+        persistir_financeiro_disco()
         st.rerun()
 else:
     val_aro = float(conf_dados.get("conta_aro", 0.0))
@@ -264,20 +241,19 @@ elif diferenca_caixa > 0:
     st.warning(f"⚠️ Atenção: Há R$ {diferenca_caixa:,.2f} a MAIS nas contas/dinheiro físico em relação ao Saldo Total do sistema.")
 else:
     st.error(f"🚨 Atenção: Está FALTANDO R$ {abs(diferenca_caixa):,.2f} nas contas/dinheiro físico em relação ao Saldo Total do sistema.")
-
 st.write("---")
-st.markdown("### 💾 Cópia de Segurança e Importação (.PKL)")
+st.markdown("### 💾 Central de Backups do Caixa")
 col_fback_1, col_fback_2 = st.columns(2)
 
 with col_fback_1:
-    st.markdown("**Baixar Cópia de Segurança**")
+    st.markdown("**Exportar Movimentações**")
     buffer_pkl = pickle.dumps(st.session_state["banco_financeiro_viva"])
-    st.download_button(label="📥 Baixar Cópia de Todo o Caixa (.PKL)", data=buffer_pkl, file_name="backup_financas_aro.pkl", mime="application/octet-stream", use_container_width=True)
+    st.download_button(label="📥 Fazer Backup de Todo o Caixa (.PKL)", data=buffer_pkl, file_name="backup_financas_aro.pkl", mime="application/octet-stream", use_container_width=True)
 
 with col_fback_2:
     if is_master:
-        st.markdown("**Importar Arquivo de Backup para a Nuvem**")
-        arquivo_fin_enviado = st.file_uploader("Selecione o arquivo '.pkl' para enviar para a nuvem:", type=["pkl"], key="uploader_financas")
+        st.markdown("**Importar Arquivo de Backup**")
+        arquivo_fin_enviado = st.file_uploader("Selecione o arquivo '.pkl' para restaurar:", type=["pkl"], key="uploader_financas")
         if arquivo_fin_enviado is not None:
             try:
                 dados_importados = pickle.load(arquivo_fin_enviado)
@@ -290,13 +266,14 @@ with col_fback_2:
                     if "conferencia_valores" not in dados_importados:
                         dados_importados["conferencia_valores"] = criar_estrutura_conferencia_padrao()
                         
-                    if st.button("🔄 Confirmar Envio do Backup para a Nuvem", use_container_width=True, type="primary"):
+                    if st.button("🔄 Confirmar Restauração do Caixa", use_container_width=True, type="primary"):
                         st.session_state["banco_financeiro_viva"] = dados_importados
-                        persistir_financeiro_nuvem()
-                        st.success("Todo o fluxo de caixa foi salvo na nuvem com sucesso!")
+                        persistir_financeiro_disco()
+                        st.success("Todo o fluxo de caixa foi restaurado com sucesso globalmente!")
                         st.rerun()
             except:
                 st.error("Arquivo inválido.")
+
 # =========================================================================================
 # 🖨️ GERADOR DE RELATÓRIO PDF EXCLUSIVO POR MÊS SELECIONADO (EXCLUSIVO MASTER)
 # =========================================================================================
@@ -398,14 +375,13 @@ if is_master:
                 use_container_width=True,
                 type="primary"
             )
-
 # =========================================================================================
 # 🏆 NOVO MÓDULO: SALDO DE TORNEIO (EXCLUSIVO MASTER - GERADOR DE IMAGEM PARA DIRETORIA)
 # =========================================================================================
 if is_master:
     st.write("---")
     st.markdown("### 🏆 Saldo de Torneio")
-    st.caption("Preencha as receitas e despesas do evento para gerar uma imagem e compartilhar com a diretoria. Os dados ficam salvos na nuvem até você apagá-los manualmente.")
+    st.caption("Preencha as receitas e despesas do evento para gerar uma imagem e compartilhar com a diretoria. Os dados ficam salvos até você apagá-los manualmente.")
     
     rascunho_torneio = st.session_state["banco_financeiro_viva"]["saldo_torneio_rascunho"]
     alterou_torneio = False
@@ -488,9 +464,10 @@ if is_master:
             
         total_despesas_torneio += val_d
 
-    # Salva automaticamente na nuvem sempre que qualquer campo for alterado
+    # Salva automaticamente no disco sempre que qualquer campo for alterado
     if alterou_torneio:
-        persistir_financeiro_nuvem()
+        persistir_financeiro_disco()
+
     saldo_final_torneio = total_receitas_torneio - total_despesas_torneio
 
     st.write("")
@@ -501,7 +478,6 @@ if is_master:
         st.metric("Total Despesas", f"R$ {total_despesas_torneio:,.2f}")
     with col_t_res3:
         st.metric("Saldo Final", f"R$ {saldo_final_torneio:,.2f}")
-
     def carregar_fonte_segura(tamanho, negrito=True):
         caminhos_bold = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -566,6 +542,7 @@ if is_master:
         f_saldo_label = carregar_fonte_segura(28, negrito=True)
         f_saldo_valor = carregar_fonte_segura(36, negrito=True)
 
+        # Cabeçalho escuro
         draw.rectangle([0, 0, largura, 135], fill=(30, 41, 59))
         
         logo_img = localizar_logo_aro(arquivo_logo)
@@ -584,6 +561,7 @@ if is_master:
         draw.text((x_texto_cabecalho, 76), sub_txt, fill=(255, 255, 255), font=f_subtitulo)
 
         y = 165
+        # Bloco Receitas
         draw.rectangle([35, y, largura - 35, y + 54], fill=(220, 252, 231), outline=(22, 101, 52), width=2)
         draw.text((55, y + 12), "RECEITAS", fill=(20, 83, 45), font=f_secao)
         txt_tot_rec = f"TOTAL: R$ {tot_rec:,.2f}"
@@ -601,6 +579,7 @@ if is_master:
             y += 50
 
         y += 32
+        # Bloco Despesas
         draw.rectangle([35, y, largura - 35, y + 54], fill=(254, 226, 226), outline=(153, 27, 27), width=2)
         draw.text((55, y + 12), "DESPESAS", fill=(127, 29, 29), font=f_secao)
         txt_tot_desp = f"TOTAL: R$ {tot_desp:,.2f}"
@@ -618,6 +597,7 @@ if is_master:
             y += 50
 
         y += 38
+        # Caixa Saldo Final
         cor_box = (219, 234, 254) if saldo_f >= 0 else (254, 202, 202)
         cor_txt_saldo = (30, 58, 138) if saldo_f >= 0 else (127, 29, 29)
         draw.rectangle([35, y, largura - 35, y + 92], fill=cor_box, outline=cor_txt_saldo, width=3)
@@ -630,27 +610,16 @@ if is_master:
         return buf_img
 
     st.write("")
-    col_btn_t1, col_btn_t2 = st.columns(2)
-    with col_btn_t1:
-        if st.button("🖼️ Gerar Imagem do Saldo do Torneio", use_container_width=True):
-            imagem_pronta = criar_imagem_saldo_torneio(
-                rascunho_torneio,
-                total_receitas_torneio,
-                total_despesas_torneio,
-                saldo_final_torneio,
-                logo_custom_up
-            )
-            st.image(imagem_pronta, caption="Pré-visualização do Saldo de Torneio", use_container_width=True)
-            st.download_button(
-                label="📥 Baixar Imagem para Enviar à Diretoria (.PNG)",
-                data=imagem_pronta,
-                file_name="saldo_torneio_aro.png",
-                mime="image/png",
-                use_container_width=True,
-                type="primary"
-            )
-    with col_btn_t2:
-        if st.button("🧹 Limpar Campos do Torneio", use_container_width=True):
-            st.session_state["banco_financeiro_viva"]["saldo_torneio_rascunho"] = criar_estrutura_torneio_padrao()
-            persistir_financeiro_nuvem()
-            st.rerun()
+    if st.button("🖼️ Gerar Imagem do Saldo do Torneio", use_container_width=True):
+        imagem_pronta = criar_imagem_saldo_torneio(
+            rascunho_torneio,
+            total_receitas_torneio,
+            total_despesas_torneio,
+            saldo_final_torneio,
+            logo_custom_up
+        )
+        st.image(imagem_pronta, caption="Pré-visualização do Saldo de Torneio", use_container_width=True)
+        st.download_button(
+            label="📥 Baixar Imagem para Enviar à Diretoria (.PNG)",
+            data=imagem_pronta,
+            file_name="saldo_torneio_aro
