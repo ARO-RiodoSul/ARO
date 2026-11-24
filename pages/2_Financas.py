@@ -297,6 +297,7 @@ if is_master:
             
             margem_x = 1.5 * cm
             y_pos = altura_f - 2.0 * cm
+            
             p.setFont("Helvetica-Bold", 14)
             p.drawString(margem_x, y_pos, "ARO - ASSOCIAÇÃO RIO DO SUL DE ORNITOLOGIA")
             y_pos -= 0.6 * cm
@@ -622,4 +623,8 @@ if is_master:
         st.download_button(
             label="📥 Baixar Imagem para Enviar à Diretoria (.PNG)",
             data=imagem_pronta,
-            file_name="saldo_torneio_aro
+            file_name="saldo_torneio_aro.png",
+            mime="image/png",
+            use_container_width=True,
+            type="primary"
+        )
