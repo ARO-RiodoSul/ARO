@@ -222,7 +222,7 @@ if is_admin and torneio_data is not None:
     if "whats_ultima_aprovacao" in st.session_state and st.session_state["whats_ultima_aprovacao"]:
         dados_w = st.session_state["whats_ultima_aprovacao"]
         st.success(f"✅ Inscrição de **{dados_w['proprietario']}** ({dados_w['ave']}) confirmada na **Estaca {dados_w['estaca']}**!")
-        col_w1, col_w2 = st.columns()
+        col_w1, col_w2 = st.columns(2)
         with col_w1:
             st.link_button(
                 label="📲 Enviar Confirmação no WhatsApp",
@@ -240,7 +240,7 @@ if is_admin and torneio_data is not None:
     else:
         for idx, row in df_pendentes_atual.iterrows():
             with st.container():
-                c_inf, c_b1, c_b2 = st.columns()
+                c_inf, c_b1, c_b2 = st.columns(3)
                 prop_up = str(row['Proprietário']).strip().upper()
                 ave_up = str(row['Nome da Ave']).strip().upper()
                 esp_up = str(row['Espécie']).strip().upper()
@@ -505,7 +505,7 @@ if role_atual == "master":
             st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
             salvar_dados_fisicos(); st.success("Torneio liberado!"); st.rerun()
     else:
-        cbt1, cbt2 = st.columns([1.4, 1])
+        cbt1, cbt2 = st.columns(2)
         with cbt1:
             st.markdown("**🖨️ Impressão de Fichas (16 por folha A4)**")
             if not df_inscritos_atual.empty:
