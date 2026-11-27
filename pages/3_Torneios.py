@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import datetime, random, io, pickle, os, urllib.parse
+import datetime, random, io, pickle, os
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
@@ -220,22 +220,53 @@ if is_admin and torneio_data is not None:
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
 
     if "whats_ultima_aprovacao" in st.session_state and st.session_state["whats_ultima_aprovacao"]:
+        import streamlit.components.v1 as components
+        import json
+
         dados_w = st.session_state["whats_ultima_aprovacao"]
         st.success(f"✅ Inscrição de **{dados_w['proprietario']}** ({dados_w['ave']}) confirmada na **Estaca {dados_w['estaca']}**!")
-        col_w1, col_w2 = st.columns(2)
-        with col_w1:
-            st.link_button(
-                label="📲 Abrir WhatsApp para Enviar",
-                url=dados_w["link"],
-                type="primary",
-                use_container_width=True
-            )
-        with col_w2:
-            if st.button("✖️ Fechar Aviso", key="fechar_aviso_whats", use_container_width=True):
-                st.session_state["whats_ultima_aprovacao"] = None
-                st.rerun()
-        with st.expander("📋 Ou toque aqui para copiar a mensagem manualmente"):
-            st.code(dados_w["texto"], language=None)
+        st.code(dados_w["texto"], language=None)
+
+        texto_js = json.dumps(dados_w["texto"])
+        components.html(
+            f"""
+            <button id="btnCopyAro" onclick='
+                const txt = {texto_js};
+                if (navigator.clipboard && window.isSecureContext) {{
+                    navigator.clipboard.writeText(txt);
+                }} else {{
+                    const ta = document.createElement("textarea");
+                    ta.value = txt;
+                    ta.style.position = "fixed";
+                    ta.style.left = "-9999px";
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                }}
+                const btn = document.getElementById("btnCopyAro");
+                btn.innerText = "✅ TEXTO COPIADO! AGORA É SÓ COLAR NO WHATSAPP";
+                btn.style.backgroundColor = "#0E9F6E";
+            ' style="
+                width: 100%;
+                padding: 14px 16px;
+                background-color: #1E3A8A;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+                font-family: sans-serif;
+            ">📋 COPIAR MENSAGEM DA INSCRIÇÃO</button>
+            """,
+            height=62
+        )
+
+        if st.button("✖️ Fechar Aviso", key="fechar_aviso_whats", use_container_width=True):
+            st.session_state["whats_ultima_aprovacao"] = None
+            st.rerun()
 
     if df_pendentes_atual.empty:
         st.caption("Nenhuma solicitação pendente no momento.")
@@ -299,14 +330,11 @@ if is_admin and torneio_data is not None:
                         f"📍 *ESTACA:* {int(sorteio)}\n"
                         f"💰 *VALOR:* {valor_fmt}"
                     )
-                    parametro_url = urllib.parse.urlencode({"text": texto_msg}, quote_via=urllib.parse.quote)
-                    link_whats = "https://whatsapp.com?" + parametro_url
                     st.session_state["whats_ultima_aprovacao"] = {
                         "proprietario": prop_up,
                         "ave": ave_up,
                         "estaca": int(sorteio),
-                        "texto": texto_msg,
-                        "link": link_whats
+                        "texto": texto_msg
                     }
                     st.rerun()
                 if c_b2.button("❌ Recusar", key=f"re_{idx}", use_container_width=True):
