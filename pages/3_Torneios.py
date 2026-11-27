@@ -157,6 +157,7 @@ if role_atual == "visitante":
                     st.dataframe(df_f[["Estaca", "Proprietário", "Nome da Ave", "Anilha", "Clube"]], hide_index=True, use_container_width=True)
                     
     st.stop()
+
 # =========================================================================================
 # 🔐 ÁREA LOGADA (SÓCIOS, DIRETORIA E MASTER)
 # =========================================================================================
@@ -271,22 +272,31 @@ if torneio_data is not None:
         st.dataframe(pd.DataFrame(lista_status), hide_index=True, use_container_width=True)
 
     st.write("---")
-    st.markdown("### 📝 Solicitar Inscrição (Sócio ARO)")
+    st.markdown("### 📝 Solicitar Inscrição")
     if st.session_state.get("sucesso_inscricao_socio", False):
         st.success("✅ Solicitação enviada! Aguarde a aprovação da diretoria.")
         if st.button("➕ Nova Solicitação", key="btn_nova_sol_socio"):
             st.session_state["sucesso_inscricao_socio"] = False
             st.rerun()
     else:
+        s_categoria_socio = st.radio(
+            "Categoria do Participante:",
+            ["Sócio ARO", "Não Sócio"],
+            horizontal=True,
+            key="s_cat_socio_radio"
+        )
+        valor_calc_s = 25.0 if s_categoria_socio == "Sócio ARO" else 35.0
+        clube_calc_s = "ARO" if s_categoria_socio == "Sócio ARO" else "Outro"
+
         with st.form("form_sol_insc_simplificado", clear_on_submit=True):
             s_proprietario = st.text_input("Nome do Proprietário:", value="" if is_admin else str(socio_vinculado))
             s_ave = st.text_input("Nome da Ave:")
             s_especie = st.selectbox("Espécie:", especies_validas)
             s_anilha = st.text_input("Número da Anilha:")
-            
-            st.text_input("Categoria / Clube:", value="Sócio ARO (R$ 25,00)", disabled=True)
-            
-            if st.form_submit_button("Solicitar Inscrição", use_container_width=True):
+
+            st.markdown(f"**Valor da Inscrição ({s_categoria_socio}):** `R$ {valor_calc_s:.2f}`".replace(".", ","))
+
+            if st.form_submit_button("📩 Solicitar Inscrição", use_container_width=True):
                 if not s_proprietario.strip() or not s_ave.strip() or not s_anilha.strip():
                     st.error("❌ Por favor, preencha todos os campos antes de enviar.")
                 else:
@@ -295,13 +305,14 @@ if torneio_data is not None:
                         "Nome da Ave": s_ave.strip(),
                         "Espécie": s_especie,
                         "Anilha": s_anilha.strip(),
-                        "Valor": 25.0,
-                        "Clube": "ARO"
+                        "Valor": valor_calc_s,
+                        "Clube": clube_calc_s
                     }])
                     st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_s], ignore_index=True)
                     salvar_dados_fisicos()
                     st.session_state["sucesso_inscricao_socio"] = True
                     st.rerun()
+
     st.write("---")
     st.markdown("### 🏆 Competidores Confirmados por Categoria")
     abas = st.tabs(especies_validas)
@@ -320,6 +331,7 @@ if torneio_data is not None:
                     },
                     use_container_width=True
                 )
+
 def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
     buf = io.BytesIO()
     canvas_obj = canvas.Canvas(buf, pagesize=A4)
@@ -437,6 +449,7 @@ def gerar_pdf_fichas_canvas(df_inscritos, data_torneio):
     canvas_obj.save()
     buf.seek(0)
     return buf
+
 if role_atual == "master":
     st.write("---")
     st.markdown("### ⚙️ Painel de Controle de Eventos (Master)")
@@ -510,25 +523,6 @@ if role_atual == "master":
                     st.session_state["inscricoes_pendentes_aro"] = pd.DataFrame(columns=["Proprietário", "Nome da Ave", "Espécie", "Anilha", "Valor", "Clube"])
                     salvar_dados_fisicos(); st.success("Torneio encerrado!"); st.rerun()
 
-        st.write("---")
-        st.markdown("### ➕ Inscrição Manual Rápida")
-        with st.form("form_manual_master", clear_on_submit=True):
-            m_prop, m_ave = st.text_input("Nome do Proprietário:"), st.text_input("Nome da Ave:")
-            m_esp, m_anilha = st.selectbox("Espécie:", especies_validas), st.text_input("Número da Anilha:")
-            m_socio = st.selectbox("Sócio da ARO?", ["Sim", "Não"], index=1)
-            if st.form_submit_button("⚡ Inscrever Ave Manualmente", use_container_width=True):
-                if m_prop and m_ave and m_anilha:
-                    ocupadas = []
-                    if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
-                        df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"] == m_esp]
-                        ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
-                    lim = 50 if m_esp in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if m_esp in ["Canário", "Azulão"] else 5)
-                    livres = [x for x in range(1, lim + 1) if x not in ocupadas]
-                    sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
-                    nova_m = pd.DataFrame([{"Proprietário": m_prop.strip(), "Nome da Ave": m_ave.strip(), "Espécie": m_esp, "Anilha": m_anilha.strip(), "Estaca": int(sorteio), "Valor": 25.0 if m_socio == "Sim" else 35.0, "Clube": "ARO" if m_socio == "Sim" else "Outro"}])
-                    st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_m], ignore_index=True)
-                    salvar_dados_fisicos(); st.success(f"✅ Ave inserida na Estaca {sorteio}!"); st.rerun()
-
         if not df_inscritos_atual.empty:
             st.write("---")
             st.markdown("### 🗑️ Cancelamento Manual Individual")
@@ -580,6 +574,6 @@ if role_atual == "master":
                         st.success("✅ Torneio restaurado com sucesso!")
                         st.rerun()
                 else:
-                    st.error("Este arquivo não é um backup válido da aba Torneios.")
-            except:
-                st.error("Erro ao ler o arquivo de backup.")
+                    st.error("❌ Arquivo de backup inválido ou incompleto.")
+            except Exception as e:
+                st.error(f"❌ Erro ao ler o arquivo: {e}")
