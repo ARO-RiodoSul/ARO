@@ -68,7 +68,7 @@ df_inscritos_atual = st.session_state["dados_torneios_internos"]
 df_pendentes_atual = st.session_state["inscricoes_pendentes_aro"]
 
 # =========================================================================================
-# 🌐 ÁREA DO VISITANTE: ESTATÍSTICAS + SOLICITAR INSCRIÇÃO + CONSULTA DE COMPETIDORES
+# 🌐 ÁREA DO VISITANTE: ESTATÍSTICAS + CONSULTA DE COMPETIDORES (SEM SOLICITAÇÃO ONLINE)
 # =========================================================================================
 if role_atual == "visitante":
     if torneio_data is None:
@@ -81,67 +81,7 @@ if role_atual == "visitante":
             cols[i].metric(label=esp, value=str(contagem[esp]))
         st.info(f"✨ **TOTAL DE GAIOLAS CONFIRMADAS:** {sum(contagem.values())}")
 
-        if "sucesso_inscricao_visitante" not in st.session_state:
-            st.session_state["sucesso_inscricao_visitante"] = False
-
-        st.write("---")
-        
-        if st.session_state["sucesso_inscricao_visitante"]:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.success("### 🎉 INSCRIÇÃO SOLICITADA COM SUCESSO!")
-            st.markdown(
-                """
-                <div style='background-color: #DEF7EC; padding: 20px; border-radius: 8px; border-left: 5px solid #0E9F6E;'>
-                    <h3 style='color: #03543F; margin-top: 0;'>🚨 Atenção, Competidor!</h3>
-                    <p style='color: #046C4E; font-size: 16px; font-weight: bold;'>
-                        Sua solicitação foi salva. Assim que um membro da diretoria da ARO aprovar, 
-                        o seu nome e o número da sua estaca aparecerão na tabela de competidores abaixo!
-                    </p>
-                </div>
-                <br>
-                """, 
-                unsafe_allow_html=True
-            )
-            st.balloons()
-            if st.button("➕ Realizar Outra Inscrição", use_container_width=True, type="primary"):
-                st.session_state["sucesso_inscricao_visitante"] = False
-                st.rerun()
-                
-        else:
-            st.markdown("### 📝 Solicitar Inscrição")
-            v_categoria_socio = st.radio(
-                "Selecione sua categoria:",
-                ["Sócio ARO", "Não Sócio"],
-                horizontal=True,
-                key="v_cat_socio_radio"
-            )
-            valor_calc_v = 25.0 if v_categoria_socio == "Sócio ARO" else 35.0
-            clube_calc_v = "ARO" if v_categoria_socio == "Sócio ARO" else "OUTRO"
-
-            with st.form("form_solicitacao_visitante_visual", clear_on_submit=True):
-                v_proprietario = st.text_input("Proprietário:")
-                v_ave = st.text_input("Ave:")
-                v_especie = st.selectbox("Espécie:", especies_validas)
-                v_anilha = st.text_input("Anilha:")
-                
-                st.markdown(f"**Valor da Inscrição ({v_categoria_socio}):** `R$ {valor_calc_v:.2f}`".replace(".", ","))
-                
-                if st.form_submit_button("Solicitar Inscrição", use_container_width=True):
-                    if not v_proprietario.strip() or not v_ave.strip() or not v_anilha.strip():
-                        st.error("❌ Por favor, preencha todos os campos do formulário antes de enviar.")
-                    else:
-                        nova_solicitacao_v = pd.DataFrame([{
-                            "Proprietário": v_proprietario.strip().upper(),
-                            "Nome da Ave": v_ave.strip().upper(),
-                            "Espécie": v_especie.strip().upper(),
-                            "Anilha": v_anilha.strip().upper(),
-                            "Valor": valor_calc_v,
-                            "Clube": clube_calc_v
-                        }])
-                        st.session_state["inscricoes_pendentes_aro"] = pd.concat([df_pendentes_atual, nova_solicitacao_v], ignore_index=True)
-                        salvar_dados_fisicos()
-                        st.session_state["sucesso_inscricao_visitante"] = True
-                        st.rerun()
+        st.warning("🔒 No momento, as solicitações de inscrição pelo app estão disponíveis apenas para usuários cadastrados. Para realizar sua inscrição, entre em contato com a diretoria da ARO.")
 
         st.write("---")
         st.markdown("### 🏆 Competidores Confirmados por Categoria")
