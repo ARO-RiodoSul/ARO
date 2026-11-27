@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import datetime, random, io, pickle, os
+import datetime, random, io, pickle, os, urllib.parse
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
@@ -215,10 +215,26 @@ if torneio_data is not None:
                 use_container_width=True,
                 type="primary"
             )
-
 if is_admin and torneio_data is not None:
     st.write("---")
     st.markdown("### 📩 Inscrições Pendentes de Aprovação")
+
+    if "whats_ultima_aprovacao" in st.session_state and st.session_state["whats_ultima_aprovacao"]:
+        dados_w = st.session_state["whats_ultima_aprovacao"]
+        st.success(f"✅ Inscrição de **{dados_w['proprietario']}** ({dados_w['ave']}) confirmada na **Estaca {dados_w['estaca']}**!")
+        col_w1, col_w2 = st.columns([3, 1])
+        with col_w1:
+            st.link_button(
+                label="📲 Enviar Confirmação no WhatsApp",
+                url=dados_w["link"],
+                type="primary",
+                use_container_width=True
+            )
+        with col_w2:
+            if st.button("✖️ Fechar Aviso", key="fechar_aviso_whats", use_container_width=True):
+                st.session_state["whats_ultima_aprovacao"] = None
+                st.rerun()
+
     if df_pendentes_atual.empty:
         st.caption("Nenhuma solicitação pendente no momento.")
     else:
@@ -234,19 +250,40 @@ if is_admin and torneio_data is not None:
                     lim = 50 if row["Espécie"] in ["Trinca Ferro", "Coleiro", "Bico de Pimenta"] else (25 if row["Espécie"] in ["Canário", "Azulão"] else 5)
                     livres = [x for x in range(1, lim + 1) if x not in ocupadas]
                     sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
+                    
+                    valor_num = float(row["Valor"])
+                    valor_fmt = f"R$ {valor_num:.2f}".replace(".", ",")
+                    
                     nova_c = pd.DataFrame([{
                         "Proprietário": row["Proprietário"],
                         "Nome da Ave": row["Nome da Ave"],
                         "Espécie": row["Espécie"],
                         "Anilha": row["Anilha"],
                         "Estaca": int(sorteio),
-                        "Valor": row["Valor"],
+                        "Valor": valor_num,
                         "Clube": row.get("Clube", "Outro")
                     }])
                     st.session_state["dados_torneios_internos"] = pd.concat([df_inscritos_atual, nova_c], ignore_index=True)
                     st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
                     salvar_dados_fisicos()
-                    st.success("Aprovada!")
+
+                    texto_msg = (
+                        f"🦅 *ARO RIO DO SUL - TORNEIO {torneio_data.strftime('%d/%m/%Y')}*\n\n"
+                        f"✅ *Sua inscrição foi confirmada!*\n\n"
+                        f"👤 *Proprietário:* {row['Proprietário']}\n"
+                        f"🦜 *Nome da Ave:* {row['Nome da Ave']}\n"
+                        f"📋 *Espécie:* {row['Espécie']}\n"
+                        f"🏷️ *Anilha:* {row['Anilha']}\n"
+                        f"📍 *Estaca:* {int(sorteio)}\n"
+                        f"💰 *Valor:* {valor_fmt}"
+                    )
+                    texto_codificado = urllib.parse.quote(texto_msg)
+                    st.session_state["whats_ultima_aprovacao"] = {
+                        "proprietario": row["Proprietário"],
+                        "ave": row["Nome da Ave"],
+                        "estaca": int(sorteio),
+                        "link": f"https://whatsapp.com{texto_codificado}"
+                    }
                     st.rerun()
                 if c_b2.button("❌ Recusar", key=f"re_{idx}", use_container_width=True):
                     st.session_state["inscricoes_pendentes_aro"] = df_pendentes_atual.drop(idx).reset_index(drop=True)
