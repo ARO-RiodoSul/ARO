@@ -299,13 +299,14 @@ if is_admin and torneio_data is not None:
                         f"📍 *ESTACA:* {int(sorteio)}\n"
                         f"💰 *VALOR:* {valor_fmt}"
                     )
-                    texto_codificado = urllib.parse.quote(texto_msg)
+                    parametro_url = urllib.parse.urlencode({"text": texto_msg}, quote_via=urllib.parse.quote)
+                    link_whats = "https://whatsapp.com?" + parametro_url
                     st.session_state["whats_ultima_aprovacao"] = {
                         "proprietario": prop_up,
                         "ave": ave_up,
                         "estaca": int(sorteio),
                         "texto": texto_msg,
-                        "link": f"https://wa.me{texto_codificado}"
+                        "link": link_whats
                     }
                     st.rerun()
                 if c_b2.button("❌ Recusar", key=f"re_{idx}", use_container_width=True):
