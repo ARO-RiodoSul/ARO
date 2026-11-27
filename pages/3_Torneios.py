@@ -225,7 +225,7 @@ if is_admin and torneio_data is not None:
         col_w1, col_w2 = st.columns(2)
         with col_w1:
             st.link_button(
-                label="📲 Enviar Confirmação no WhatsApp",
+                label="📲 Abrir WhatsApp para Enviar",
                 url=dados_w["link"],
                 type="primary",
                 use_container_width=True
@@ -234,6 +234,8 @@ if is_admin and torneio_data is not None:
             if st.button("✖️ Fechar Aviso", key="fechar_aviso_whats", use_container_width=True):
                 st.session_state["whats_ultima_aprovacao"] = None
                 st.rerun()
+        with st.expander("📋 Ou toque aqui para copiar a mensagem manualmente"):
+            st.code(dados_w["texto"], language=None)
 
     if df_pendentes_atual.empty:
         st.caption("Nenhuma solicitação pendente no momento.")
@@ -250,12 +252,26 @@ if is_admin and torneio_data is not None:
                 c_inf.write(f"👤 **{prop_up}** | 🦜 {ave_up} ({esp_up}) | 🏷️ {ani_up} | 🏛️ {clube_up}")
                 if c_b1.button("✅ Aprovar", key=f"ap_{idx}", use_container_width=True):
                     ocupadas = []
+                    estacas_mesmo_prop = []
                     if not df_inscritos_atual.empty and "Estaca" in df_inscritos_atual.columns:
                         df_esp = df_inscritos_atual[df_inscritos_atual["Espécie"].str.upper() == esp_up]
                         ocupadas = pd.to_numeric(df_esp["Estaca"], errors='coerce').dropna().astype(int).tolist()
+                        df_mesmo_prop = df_esp[df_esp["Proprietário"].str.upper() == prop_up]
+                        estacas_mesmo_prop = pd.to_numeric(df_mesmo_prop["Estaca"], errors='coerce').dropna().astype(int).tolist()
+
+                    def estaca_valida_distancia(num_estaca):
+                        return all(abs(num_estaca - e_prop) >= 3 for e_prop in estacas_mesmo_prop)
+
                     lim = 50 if esp_up in ["TRINCA FERRO", "COLEIRO", "BICO DE PIMENTA"] else (25 if esp_up in ["CANÁRIO", "AZULÃO"] else 5)
-                    livres = [x for x in range(1, lim + 1) if x not in ocupadas]
-                    sorteio = random.choice(livres) if livres else (max(ocupadas) + 1 if ocupadas else lim + 1)
+                    livres_seguras = [x for x in range(1, lim + 1) if x not in ocupadas and estaca_valida_distancia(x)]
+
+                    if livres_seguras:
+                        sorteio = random.choice(livres_seguras)
+                    else:
+                        candidato = lim + 1
+                        while candidato in ocupadas or not estaca_valida_distancia(candidato):
+                            candidato += 1
+                        sorteio = candidato
                     
                     valor_num = float(row["Valor"])
                     valor_fmt = f"R$ {valor_num:.2f}".replace(".", ",")
@@ -288,7 +304,8 @@ if is_admin and torneio_data is not None:
                         "proprietario": prop_up,
                         "ave": ave_up,
                         "estaca": int(sorteio),
-                        "link": f"https://whatsapp.com{texto_codificado}"
+                        "texto": texto_msg,
+                        "link": f"https://wa.me{texto_codificado}"
                     }
                     st.rerun()
                 if c_b2.button("❌ Recusar", key=f"re_{idx}", use_container_width=True):
